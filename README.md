@@ -2,45 +2,58 @@
 
 NYR is a from-scratch x86-64 operating system project.
 
-## Current foundation
-
-- Freestanding x86-64 kernel entry point and dedicated kernel stack.
-- Higher-half kernel link address: `0xffffffff80000000`.
-- Versioned NYR boot-information structure (`NYR0`).
-- Initial 32-bpp framebuffer handoff and kernel fill test.
-- Host-tool audit via `make preflight`.
-
 ## Develop from an iPhone with GitHub Codespaces
 
-This repository includes a Codespaces development container. Open the repository in GitHub, create a Codespace from the `codespaces-development` branch, and use the browser-based VS Code terminal. No Mac, local Linux installation, or iPhone terminal app is required.
+The `.devcontainer` installs the current Ubuntu 24.04 development toolchain, including GCC/binutils, Clang/LLD, NASM, CMake/Ninja, QEMU, OVMF, GDB, FAT/ISO utilities, Rust, Python and common build utilities. The container upgrades the base image's security packages and records installed package versions in `/etc/nyr-toolchain-packages.txt`.
 
-When the container is created, it installs the current build toolchain and runs the preflight and kernel build.
+Open the repository in GitHub, select the `codespaces-development` branch, then choose **Code → Codespaces → Create codespace**. The post-create command runs preflight and builds the kernel. Use the browser-based VS Code terminal on iPhone.
 
-## Build
+The tool set and Ubuntu release are consistent across Codespaces. Package patch versions are the newest available from Ubuntu 24.04 repositories when the image is built; they can advance over time. Dependabot checks the container base image and GitHub Actions weekly. This is a maintained, current toolchain rather than a bit-for-bit frozen supply-chain lockfile.
+
+## Build and inspect
 
 ```sh
 make preflight
-make
+make clean all
+make toolchain-info
 ```
 
-Output: `build/nyr-kernel.elf`.
+Kernel output: `build/nyr-kernel.elf`.
 
-To rebuild from a clean state:
+## QEMU testing
 
 ```sh
-make clean
-make
+make qemu-smoke
+make qemu-run
 ```
 
-## Toolchain
+`make qemu-smoke` verifies that QEMU can start headlessly and create a serial log. `make qemu-run` launches a UEFI disk image with no graphical display and attaches COM1 to the terminal. In Codespaces, terminal output is viewable in the browser on a phone.
 
-Required for the current kernel build: a C compiler, linker, and GNU Make. The Codespaces image also installs development tools for planned work, including Clang/LLD, NASM, QEMU, OVMF, GDB, FAT/ISO utilities, CMake, Ninja, and Rust.
+To save serial output to a file instead:
 
-The preflight reports optional tools without blocking the current kernel build. It does not request root privileges or attempt package installation.
+```sh
+NYR_QEMU_SERIAL=file make qemu-run
+```
 
-## Current limitation
+To select a disk image explicitly:
 
-The repository currently contains a kernel entry point and framebuffer test, not a complete bootable operating system. A UEFI loader and ELF-loading path are still milestones. QEMU/OVMF are installed in Codespaces for subsequent development, but a boot test is not yet available until that loader exists.
+```sh
+NYR_DISK_IMAGE=build/nyr-uefi.img make qemu-run
+```
+
+The kernel now initializes COM1 and emits boot diagnostics. **A full NYR boot is not yet possible:** the repository still needs its UEFI loader, ELF loader, and disk-image creation target. Until those are implemented, `qemu-smoke` tests the emulator and serial plumbing, not a successful NYR guest boot. The UEFI runner is ready for that image when the loader milestone lands.
+
+## Current kernel foundation
+
+- Freestanding x86-64 entry point and dedicated kernel stack.
+- Higher-half link address: `0xffffffff80000000`.
+- Versioned NYR boot-information structure (`NYR0`).
+- 32-bpp framebuffer fill test.
+- COM1 serial diagnostics for headless debugging.
+
+## Continuous integration and updates
+
+GitHub Actions runs preflight, compiles the kernel, verifies the ELF, and performs a headless QEMU startup/serial test on pushes and pull requests. Build artifacts and the QEMU smoke log are retained for 14 days. Dependabot checks GitHub Actions and the Codespaces base image weekly.
 
 ## Next milestones
 
@@ -51,13 +64,3 @@ The repository currently contains a kernel entry point and framebuffer test, not
 5. GDT/IDT, exceptions, APIC/timers.
 6. Scheduler, processes, ring 3, syscall ABI.
 7. VFS, init process, drivers, storage and userspace.
-
-## Mounted tools
-
-NYR also supports a tool bundle mounted at `/mnt/tools`, or another path selected with `NYR_TOOLS_MOUNT`. Activate it with:
-
-```sh
-. tools/env.sh
-```
-
-No root access is required for the project build itself.
