@@ -23,7 +23,19 @@ preflight:
 
 check-env: preflight
 
+qemu-smoke:
+	@sh tools/qemu-smoke.sh
+
+qemu-run: all
+	@sh tools/qemu-run.sh
+
+toolchain-info:
+	@cc --version | head -n 1
+	@ld --version | head -n 1
+	@qemu-system-x86_64 --version | head -n 1
+	@if [ -f /etc/nyr-toolchain-packages.txt ]; then cat /etc/nyr-toolchain-packages.txt; fi
+
 clean:
 	rm -rf build
 
-.PHONY: all clean check-env preflight
+.PHONY: all clean check-env preflight qemu-smoke qemu-run toolchain-info
