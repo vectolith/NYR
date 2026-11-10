@@ -1,0 +1,17 @@
+{
+  "name": "NYR OS Development",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "make preflight && make",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.makefile-tools"
+      ]
+    }
+  }
+}
