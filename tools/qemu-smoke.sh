@@ -8,7 +8,7 @@ rm -f "$LOG"
 QEMU=${QEMU:-qemu-system-x86_64}
 command -v "$QEMU" >/dev/null 2>&1 || { echo "QEMU not found: $QEMU" >&2; exit 1; }
 set +e
-timeout 3 "$QEMU" -machine none -nodefaults -display none -monitor none -serial "file:$LOG" -S
+timeout 3 "$QEMU" -machine q35 -m 128M -nodefaults -display none -monitor none -serial "file:$LOG" -S
 status=$?
 set -e
 if [ "$status" -ne 124 ] && [ "$status" -ne 137 ]; then
