@@ -1,4 +1,4 @@
-name: NYR kernel build
+name: NYR kernel build and emulator checks
 
 on:
   push:
@@ -7,23 +7,48 @@ on:
       - codespaces-development
       - import/nyr-bundle
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: nyr-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  build-and-qemu:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install build tools
+      - name: Install current distro toolchain and QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get upgrade -y
+          sudo apt-get install -y build-essential qemu-system-x86 ovmf binutils
+      - name: Record tool versions
+        run: |
+          cc --version | head -n 1
+          ld --version | head -n 1
+          qemu-system-x86_64 --version | head -n 1
       - name: Preflight
         run: make preflight
       - name: Build kernel
-        run: make
-      - name: Verify ELF output
-        run: file build/nyr-kernel.elf
+        run: make clean all
+      - name: Verify kernel ELF
+        run: |
+          file build/nyr-kernel.elf
+          readelf -h build/nyr-kernel.elf
+      - name: QEMU headless startup and serial plumbing
+        run: make qemu-smoke
+      - name: Upload kernel and QEMU serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nyr-kernel-and-qemu-logs
+          path: |
+            build/nyr-kernel.elf
+            build/qemu-smoke-serial.log
+          if-no-files-found: warn
+          retention-days: 14
