@@ -3,24 +3,47 @@
 NYR is a from-scratch x86-64 operating system project.
 
 ## Current foundation
-- Freestanding x86-64 kernel entry point and ddicated kernel stack.
-- Higher-half kernel link address: `0xffffffff800000000`.
+
+- Freestanding x86-64 kernel entry point and dedicated kernel stack.
+- Higher-half kernel link address: `0xffffffff80000000`.
 - Versioned NYR boot-information structure (`NYR0`).
 - Initial 32-bpp framebuffer handoff and kernel fill test.
-- Host-tool audit via `make check-env`.
+- Host-tool audit via `make preflight`.
+
+## Develop from an iPhone with GitHub Codespaces
+
+This repository includes a Codespaces development container. Open the repository in GitHub, create a Codespace from the `codespaces-development` branch, and use the browser-based VS Code terminal. No Mac, local Linux installation, or iPhone terminal app is required.
+
+When the container is created, it installs the current build toolchain and runs the preflight and kernel build.
 
 ## Build
-The current foundation builds with the host GCC/binutils toolchain:
 
-    make preflight
-    make
+```sh
+make preflight
+make
+```
 
-Output: `build/nyr-kernel.elf`
+Output: `build/nyr-kernel.elf`.
 
-## Intended development stack
-The project will grow to use UEFI + OVMF under QEMU for repeatable boot testing. Debugging/image tools are treated as planned dependencies until present on the host.
+To rebuild from a clean state:
+
+```sh
+make clean
+make
+```
+
+## Toolchain
+
+Required for the current kernel build: a C compiler, linker, and GNU Make. The Codespaces image also installs development tools for planned work, including Clang/LLD, NASM, QEMU, OVMF, GDB, FAT/ISO utilities, CMake, Ninja, and Rust.
+
+The preflight reports optional tools without blocking the current kernel build. It does not request root privileges or attempt package installation.
+
+## Current limitation
+
+The repository currently contains a kernel entry point and framebuffer test, not a complete bootable operating system. A UEFI loader and ELF-loading path are still milestones. QEMU/OVMF are installed in Codespaces for subsequent development, but a boot test is not yet available until that loader exists.
 
 ## Next milestones
+
 1. UEFI loader and ELF loading.
 2. Firmware memory map + framebuffer handoff.
 3. ExitBootServices and higher-half page tables.
@@ -29,17 +52,12 @@ The project will grow to use UEFI + OVMF under QEMU for repeatable boot testing.
 6. Scheduler, processes, ring 3, syscall ABI.
 7. VFS, init process, drivers, storage and userspace.
 
-## Preflight
-Run `make preflight` before toolchain-dependent work. It checks compilers, linkers, assemblers, build systems, binary utilities, QEMU, OVMF/EDK II firmware, debuggers, FAT/ISO tooling, Rust, source/network utilities, and package-management privilege. It reports all missing capabilities in one run and exits non-zero unless the full planned environment is available.
-
-## Git-based tool sources
-NYR itself is a Git repository. `tools/bootstrap-git-tools.sh` clones or fast-forward-updates upstream source repositories for the missing development stack into `.toolchain/src` without requiring root. Cloning source is distinct from successfully building/installing each tool; prerequisites are still enforced by `make preflight`.
-
 ## Mounted tools
-NYR supports a read-only or read-write tool bundle mounted at `/mnt/tools`, or another path selected with `NYR_TOOLS_MOUNT`. The activation script searches `/mnt/tools/bin` and each `/mnt/tools/*/bin`, prepends them to `PATH`, and discovers OVMF code/variable firmware images.
 
-    NYR_TOOLS_MOUNT=/mnt/tools make preflight
-    NYR_TOOLS_MOUNT=/mnt/tools make
-    . tools/env.sh
+NYR also supports a tool bundle mounted at `/mnt/tools`, or another path selected with `NYR_TOOLS_MOUNT`. Activate it with:
 
-No root access is required. Mounted executables must match the sandbox architecture and include their runtime libraries.
+```sh
+. tools/env.sh
+```
+
+No root access is required for the project build itself.
