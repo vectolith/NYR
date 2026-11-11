@@ -45,7 +45,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Dedicated kernel stack and COM1 diagnostics.
 - 32-bpp RGB framebuffer initialization.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. Virtual memory management, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The current VMM milestone is read-only page-table inspection and address translation; page-table mutation, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 

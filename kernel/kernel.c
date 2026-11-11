@@ -4,6 +4,7 @@
 #include "include/memory.h"
 #include "include/serial.h"
 #include "include/interrupts.h"
+#include "include/vmm.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -26,6 +27,16 @@ static volatile struct limine_hhdm_request hhdm_request = {
     .id = LIMINE_HHDM_REQUEST_ID,
     .revision = 0,
     .response = 0
+};
+
+LIMINE_REQUEST
+static volatile struct limine_paging_mode_request paging_mode_request = {
+    .id = LIMINE_PAGING_MODE_REQUEST_ID,
+    .revision = 0,
+    .response = 0,
+    .mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .max_mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .min_mode = LIMINE_PAGING_MODE_X86_64_4LVL
 };
 
 LIMINE_REQUEST
@@ -93,6 +104,13 @@ void nyr_kernel_main(void) {
         }
     } else {
         nyr_serial_write("NYR: framebuffer unavailable\r\n");
+    }
+
+    struct limine_paging_mode_response *paging_mode = paging_mode_request.response;
+    if (paging_mode == 0 ||
+        paging_mode->mode != LIMINE_PAGING_MODE_X86_64_4LVL) {
+        nyr_serial_write("NYR: four-level paging mode unavailable\\r\\n");
+        halt_forever();
     }
 
     struct limine_hhdm_response *hhdm = hhdm_request.response;
