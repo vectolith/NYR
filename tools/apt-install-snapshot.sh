@@ -18,7 +18,9 @@ package_index_complete() {
 }
 
 attempt=1
-max_attempts=5
+# Snapshot-service 5xx responses can persist for several minutes. Keep the
+# immutable snapshot and retry with bounded backoff within the CI job timeout.
+max_attempts=8
 while [ "$attempt" -le "$max_attempts" ]; do
     rm -rf /var/lib/apt/lists/*
     if apt-get -o Acquire::Retries=2 \
@@ -38,7 +40,12 @@ while [ "$attempt" -le "$max_attempts" ]; do
         exit 1
     fi
     echo "APT snapshot attempt $attempt/$max_attempts failed; retrying" >&2
-    sleep "$((attempt * 5))"
+    delay=$((attempt * 15))
+    if [ "$delay" -gt 120 ]; then
+        delay=120
+    fi
+    echo "Waiting ${delay}s before the next snapshot attempt" >&2
+    sleep "$delay"
     attempt=$((attempt + 1))
 done
 
