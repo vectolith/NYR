@@ -694,3 +694,78 @@ bool nyr_vmm_self_test(uint64_t hhdm_offset) {
     return duplicate_rejected && borrowed_removed && borrowed_returned &&
            borrowed_freed;
 }
+
+
+static uint64_t vmm_read_tsc_ordered(void) {
+    uint32_t low, high;
+    __asm__ volatile ("lfence; rdtsc" : "=a"(low), "=d"(high) : : "memory");
+    return ((uint64_t)high << 32) | low;
+}
+
+bool nyr_vmm_smp_benchmark(uint64_t hhdm_offset) {
+    enum { ITERATIONS = 8 };
+    const uint64_t virtual_address = UINT64_C(0xffffd00000001000);
+    uint64_t map_ticks = 0, protect_ticks = 0, unmap_ticks = 0;
+    uint64_t shootdown_ticks = 0, flush_ticks = 0;
+
+    for (unsigned int i = 0; i < ITERATIONS; ++i) {
+        const uint64_t frame = nyr_pmm_alloc_frame();
+        if (frame == 0) return false;
+
+        uint64_t start = vmm_read_tsc_ordered();
+        const bool mapped = nyr_vmm_map_page(
+            hhdm_offset, virtual_address, frame, 0, NYR_VMM_PAGE_OWNED);
+        map_ticks += vmm_read_tsc_ordered() - start;
+        if (!mapped) {
+            (void)nyr_pmm_free_frame(frame);
+            return false;
+        }
+
+        start = vmm_read_tsc_ordered();
+        const bool protected = nyr_vmm_protect_page(
+            hhdm_offset, virtual_address, NYR_VMM_MAP_WRITE);
+        protect_ticks += vmm_read_tsc_ordered() - start;
+        if (!protected) {
+            struct nyr_vmm_unmapped_page cleanup;
+            if (nyr_vmm_unmap_page(hhdm_offset, virtual_address, &cleanup))
+                (void)nyr_pmm_free_frame(cleanup.physical_address);
+            return false;
+        }
+
+        struct nyr_vmm_unmapped_page unmapped;
+        start = vmm_read_tsc_ordered();
+        const bool removed = nyr_vmm_unmap_page(
+            hhdm_offset, virtual_address, &unmapped);
+        unmap_ticks += vmm_read_tsc_ordered() - start;
+        if (!removed || unmapped.physical_address != frame ||
+            unmapped.ownership != NYR_VMM_PAGE_OWNED ||
+            !nyr_pmm_free_frame(frame)) return false;
+    }
+
+    for (unsigned int i = 0; i < ITERATIONS; ++i) {
+        uint64_t start = vmm_read_tsc_ordered();
+        if (!nyr_smp_tlb_shootdown(virtual_address)) return false;
+        shootdown_ticks += vmm_read_tsc_ordered() - start;
+
+        start = vmm_read_tsc_ordered();
+        if (!nyr_smp_tlb_flush_all()) return false;
+        flush_ticks += vmm_read_tsc_ordered() - start;
+    }
+
+    nyr_serial_write("NYR: VMM map+shootdown average TSC ticks ");
+    nyr_serial_write_u64(map_ticks / ITERATIONS);
+    nyr_serial_write("\\r\\n");
+    nyr_serial_write("NYR: VMM protect+shootdown average TSC ticks ");
+    nyr_serial_write_u64(protect_ticks / ITERATIONS);
+    nyr_serial_write("\\r\\n");
+    nyr_serial_write("NYR: VMM unmap+reclaim average TSC ticks ");
+    nyr_serial_write_u64(unmap_ticks / ITERATIONS);
+    nyr_serial_write("\\r\\n");
+    nyr_serial_write("NYR: remote TLB invalidate average TSC ticks ");
+    nyr_serial_write_u64(shootdown_ticks / ITERATIONS);
+    nyr_serial_write("\\r\\n");
+    nyr_serial_write("NYR: remote full TLB flush average TSC ticks ");
+    nyr_serial_write_u64(flush_ticks / ITERATIONS);
+    nyr_serial_write("\\r\\n");
+    return true;
+}

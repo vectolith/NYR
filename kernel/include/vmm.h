@@ -33,6 +33,9 @@ bool nyr_vmm_translate_current(uint64_t hhdm_offset,
 /* Exercise cross-CPU invalidation after APs have completed NMI setup. */
 bool nyr_vmm_smp_self_test(uint64_t hhdm_offset);
 
+/* Boot-time benchmark for page mapping and TLB invalidation paths. */
+bool nyr_vmm_smp_benchmark(uint64_t hhdm_offset);
+
 enum nyr_vmm_map_flags {
     NYR_VMM_MAP_WRITE = 1u << 0,
     NYR_VMM_MAP_USER = 1u << 1,
