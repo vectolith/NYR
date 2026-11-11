@@ -12,30 +12,38 @@ concurrency:
 jobs:
   build-and-qemu:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - name: Install toolchain, UEFI firmware and ISO utilities
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Install UEFI firmware and ISO utilities
         run: |
           sudo apt-get update
-          sudo apt-get upgrade -y
-          sudo apt-get install -y build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
+          sudo apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
       - name: Record tool versions
         run: |
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
+          dpkg-query -W -f='${binary:Package}=${Version}\n' ovmf qemu-system-x86 xorriso
       - run: make preflight
       - name: Build kernel and UEFI ISO
         run: make clean all iso
-      - name: Verify artifacts
+      - name: Verify ELF and ISO artifacts
         run: |
           file build/nyr-kernel.elf build/nyr-uefi.iso
           readelf -h build/nyr-kernel.elf
+          readelf -lW build/nyr-kernel.elf
+          readelf -SW build/nyr-kernel.elf | grep -F '.limine_requests'
+          if readelf -lW build/nyr-kernel.elf | grep -E 'LOAD.*RWE'; then
+            echo 'Unexpected writable+executable ELF load segment' >&2
+            exit 1
+          fi
+          xorriso -indev build/nyr-uefi.iso -toc
       - name: Boot UEFI ISO and verify serial output
         run: make qemu-boot-smoke
       - name: Upload kernel, ISO and boot log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: nyr-uefi-build-and-boot-logs
           path: |
