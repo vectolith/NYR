@@ -335,13 +335,16 @@ bool nyr_pmm_free_frame(uint64_t physical_address) {
 }
 
 bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats) {
+    pmm_serial_write("NYR: PMM stats function entered\r\n");
     if (!allocator_ready || stats == NULL) {
+        pmm_serial_write("NYR: PMM stats invalid state or pointer\r\n");
         return false;
     }
 
     stats->managed_frames = managed_frames;
     stats->free_frames = free_frames;
     stats->allocated_frames = allocated_frames;
+    pmm_serial_write("NYR: PMM stats function returning\r\n");
     return true;
 }
 
