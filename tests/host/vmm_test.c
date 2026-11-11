@@ -120,12 +120,33 @@ static int test_rejections(void) {
     return 0;
 }
 
+static int test_mapping_argument_validation(void) {
+    if (nyr_vmm_map_page(0, UINT64_C(0xffffc00000000001),
+                         PAGE_SIZE, 0, NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_map_page(0, UINT64_C(0xffffc00000000000),
+                         PAGE_SIZE + 1u, 0, NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_map_page(0, UINT64_C(0xffffc00000000000),
+                         PAGE_SIZE, NYR_VMM_MAP_WRITE | NYR_VMM_MAP_EXECUTE,
+                         NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_map_page(0, UINT64_C(0xffffc00000000000),
+                         PAGE_SIZE, 0, (enum nyr_vmm_page_ownership)9)) {
+        fputs("host VMM test: invalid map arguments accepted\\n", stderr);
+        return 1;
+    }
+    if (nyr_vmm_unmap_page(0, UINT64_C(0xffffc00000000001), NULL)) {
+        fputs("host VMM test: invalid unmap arguments accepted\\n", stderr);
+        return 1;
+    }
+    puts("host VMM test: alignment, W^X, ownership and unmap arguments validated");
+    return 0;
+}
+
 int main(void) {
     if (setup() != 0) {
         fputs("host VMM test: allocation failed\n", stderr);
         return 1;
     }
-    int result = test_4k() | test_effective_permissions() | test_2m() | test_1g() | test_reserved_huge_bits() | test_rejections();
+    int result = test_4k() | test_effective_permissions() | test_2m() | test_1g() | test_reserved_huge_bits() | test_rejections() | test_mapping_argument_validation();
     free(tables);
     return result;
 }

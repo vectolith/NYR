@@ -34,7 +34,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, and the final boot milestone on COM1. CI also runs host-side PMM tests against valid, overlapping, and overflowing memory maps.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership/TLB self-tests, and the final boot milestone on COM1. CI also runs host-side PMM tests against valid, overlapping, and overflowing memory maps.
 
 ## Current boot architecture
 
@@ -47,7 +47,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a read-only page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The current VMM milestone is read-only page-table inspection and address translation. Page-table mutation, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM now supports single-page 4 KiB mapping and unmapping in the active address space, with owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings are deliberately not split. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -64,7 +64,7 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 ## Virtual memory inspection
 
-The current VMM is deliberately read-only. It requests four-level paging from Limine and walks the active CR3 hierarchy through the HHDM.
+The VMM requests four-level paging from Limine and walks the active CR3 hierarchy through the HHDM. It supports mapping and unmapping individual 4 KiB pages in the active address space.
 
 - Translates 4 KiB PTE mappings and 2 MiB/1 GiB huge-page mappings.
 - Calculates effective writable, user-accessible, and executable permissions by combining flags across all paging levels.

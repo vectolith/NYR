@@ -25,6 +25,9 @@ uint64_t nyr_pmm_managed_frames(void);
 uint64_t nyr_pmm_free_frames(void);
 uint64_t nyr_pmm_allocated_frames(void);
 
+/* True only for a live PMM allocation, excluding allocator metadata pages. */
+bool nyr_pmm_frame_is_allocated(uint64_t physical_address);
+
 /* A deterministic allocator self-test intended for early boot diagnostics. */
 bool nyr_pmm_self_test(void);
 

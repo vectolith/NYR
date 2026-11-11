@@ -140,11 +140,16 @@ void nyr_kernel_main(void) {
         halt_forever();
     }
     nyr_serial_write("NYR: PMM self-test passed\r\n");
+
+    if (!nyr_vmm_enable_nx()) {
+        nyr_serial_write("NYR: CPU NX support unavailable\r\n");
+        halt_forever();
+    }
     if (!nyr_vmm_self_test(hhdm->offset)) {
         nyr_serial_write("NYR: virtual memory translation self-test failed\r\n");
         halt_forever();
     }
-    nyr_serial_write("NYR: virtual memory translation self-test passed\r\n");
+    nyr_serial_write("NYR: virtual memory mapping, ownership, and TLB self-tests passed\r\n");
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }
