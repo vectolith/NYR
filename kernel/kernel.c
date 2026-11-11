@@ -236,6 +236,11 @@ void nyr_kernel_main(void) {
             halt_forever();
         }
         nyr_serial_write("NYR: remote TLB shootdown self-test passed\r\n");
+        if (!nyr_vmm_smp_benchmark(hhdm->offset)) {
+            nyr_serial_write("NYR: VMM/TLB benchmark failed\\r\\n");
+            halt_forever();
+        }
+        nyr_serial_write("NYR: VMM/TLB benchmark completed\\r\\n");
         nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
