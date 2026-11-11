@@ -60,4 +60,4 @@ toolchain-info:
 clean:
 	rm -rf build
 
-.PHONY: all clean check-env preflight iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info
+.PHONY: all clean check-env preflight test-host iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info
