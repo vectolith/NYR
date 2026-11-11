@@ -34,6 +34,21 @@ static uint64_t free_frames;
 static uint64_t allocated_frames;
 static bool allocator_ready;
 
+static void pmm_serial_write(const char *text) {
+    while (*text != '\0') {
+        unsigned int timeout = 1000000;
+        uint8_t status = 0;
+        do {
+            __asm__ volatile ("inb %1, %0" : "=a"(status) : "Nd"((uint16_t)0x3fd));
+            if (status & 0x20u) break;
+        } while (--timeout != 0);
+        if (timeout != 0) {
+            __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)*text), "Nd"((uint16_t)0x3f8));
+        }
+        ++text;
+    }
+}
+
 static bool add_overflow_u64(uint64_t a, uint64_t b, uint64_t *out) {
     if (b > UINT64_MAX - a) {
         return true;
@@ -109,6 +124,7 @@ static bool map_entry(const struct limine_memmap_response *map,
 
 bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
                   uint64_t hhdm_offset) {
+    pmm_serial_write("NYR: PMM init entered\r\n");
     if (allocator_ready || memory_map == NULL ||
         memory_map->entries == NULL || memory_map->entry_count == 0 ||
         memory_map->entry_count > NYR_MAX_MAP_ENTRIES) {
@@ -203,12 +219,14 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     metadata_physical = chosen_start;
     metadata_pages = required_pages;
     frame_states = (uint8_t *)(uintptr_t)(hhdm_offset + metadata_physical);
+    pmm_serial_write("NYR: PMM metadata pointer established\r\n");
 
     /* Mark every frame unmanaged first; only usable pages are subsequently freed. */
     for (uint64_t i = 0; i < state_bytes_u64; ++i) {
         frame_states[i] = 0;
     }
 
+    pmm_serial_write("NYR: PMM metadata cleared\r\n");
     managed_frames = 0;
     free_frames = 0;
     allocated_frames = 0;
@@ -237,6 +255,7 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         }
     }
 
+    pmm_serial_write("NYR: PMM usable pages marked\r\n");
     const uint64_t metadata_first = metadata_physical / NYR_PAGE_SIZE;
     for (uint64_t i = 0; i < metadata_pages; ++i) {
         const uint64_t frame = metadata_first + i;
@@ -249,6 +268,7 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         ++allocated_frames;
     }
 
+    pmm_serial_write("NYR: PMM metadata reserved\r\n");
     next_hint = 0;
     allocator_ready = true;
     return true;
@@ -311,9 +331,11 @@ bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats) {
         return false;
     }
 
+    pmm_serial_write("NYR: PMM stats entered\r\n");
     stats->managed_frames = managed_frames;
     stats->free_frames = free_frames;
     stats->allocated_frames = allocated_frames;
+    pmm_serial_write("NYR: PMM stats completed\r\n");
     return true;
 }
 
