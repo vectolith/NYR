@@ -59,3 +59,11 @@ jobs:
             build/qemu-boot-serial.log
           if-no-files-found: warn
           retention-days: 14
+
+  devcontainer-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Build the Codespaces development image
+        run: docker build --pull --file .devcontainer/Dockerfile --tag nyr-codespaces:ci .
