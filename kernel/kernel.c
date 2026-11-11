@@ -192,9 +192,9 @@ void nyr_kernel_main(void) {
         }
         serial_line("NYR: SMP application processors online ", nyr_smp_online_count());
     } else {
-        nyr_serial_write("NYR: SMP AP startup skipped; no MP response\\r\\n");
+        nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
     }
-    nyr_serial_write("NYR: SMP CPUs parked with interrupts disabled; scheduler not enabled\\r\\n");
+    nyr_serial_write("NYR: SMP CPUs parked with interrupts disabled; scheduler not enabled\r\n");
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }
