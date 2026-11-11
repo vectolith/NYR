@@ -94,3 +94,26 @@ The early physical page-frame allocator consumes Limine's memory-map and HHDM re
 - Runs a QEMU boot self-test covering unique aligned allocations, invalid frees, metadata protection, release, and reuse.
 
 The allocator is deliberately single-CPU at this stage. It must gain interrupt-safe/SMP synchronization before being called concurrently or from interrupt context.
+
+
+## Per-CPU architecture and SMP safety
+
+The bootstrap processor installs a shared, immutable IDT for the architectural
+exception vectors and initializes its private x86-64 GDT, TSS, double-fault IST
+stack, kernel-entry stack, and GS-based CPU-local record. Each application
+processor performs the same private descriptor/TSS/GS initialization before it
+is counted online. The TSS I/O-permission bitmap denies port I/O by default.
+The current exception dispatcher handles the breakpoint self-test and treats
+other exceptions as fatal.
+
+The kernel spinlock primitive uses acquire/release atomics and an IRQ-saving
+critical-section API. PMM allocation/accounting and active-address-space VMM
+mapping, protection, unmapping, and translation paths are serialized. Host
+tests exercise lock contention across four threads.
+
+**AP execution remains deliberately gated.** APs finish per-CPU architecture
+initialization, publish their online state, and park with interrupts disabled.
+NYR does not yet enable external interrupts, configure local APIC routing or
+IPIs, perform remote TLB shootdowns, or schedule work on APs. Those facilities
+must be implemented and verified before APs are released into shared kernel
+execution.

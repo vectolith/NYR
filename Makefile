@@ -15,15 +15,19 @@ build/kernel.o: kernel/kernel.c kernel/include/limine.h kernel/include/memory.h 
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/memory.o: kernel/memory.c kernel/include/memory.h kernel/include/limine.h
+build/memory.o: kernel/memory.c kernel/include/memory.h kernel/include/limine.h kernel/include/lock.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h
+build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h kernel/include/lock.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h kernel/include/vmm.h
+build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h kernel/include/vmm.h kernel/include/interrupts.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/lock.o: kernel/lock.c kernel/include/lock.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -39,10 +43,10 @@ build/interrupts_asm.o: kernel/interrupts.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
+build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lock.o kernel/linker.ld
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lock.o -o $@
 
-test-host: test-pmm-host test-vmm-host test-smp-host
+test-host: test-pmm-host test-vmm-host test-smp-host test-lock-host
 
 test-pmm-host:
 	@sh tools/test-pmm-host.sh
@@ -52,6 +56,9 @@ test-vmm-host:
 
 test-smp-host:
 	@sh tools/test-smp-host.sh
+
+test-lock-host:
+	@sh tools/test-lock-host.sh
 
 iso: all
 	@bash tools/build-iso.sh
@@ -79,4 +86,4 @@ toolchain-info:
 clean:
 	rm -rf build
 
-.PHONY: all clean check-env preflight test-host test-pmm-host test-vmm-host test-smp-host iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info
+.PHONY: all clean check-env preflight test-host test-pmm-host test-vmm-host test-smp-host test-lock-host iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info

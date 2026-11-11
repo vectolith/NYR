@@ -6,6 +6,7 @@
 #include "../../kernel/include/limine.h"
 #include "../../kernel/include/smp.h"
 #include "../../kernel/include/vmm.h"
+#include "../../kernel/include/interrupts.h"
 
 /*
  * The host test exercises topology validation only. AP startup is not invoked,
@@ -15,6 +16,12 @@
 bool nyr_vmm_enable_nx(void) {
     return true;
 }
+bool nyr_interrupts_init_cpu(uint32_t cpu_index, uint32_t lapic_id, bool bootstrap_processor) {
+    (void)cpu_index; (void)lapic_id; (void)bootstrap_processor;
+    return true;
+}
+uint32_t nyr_cpu_local_index(void) { return 0u; }
+uint32_t nyr_cpu_local_lapic_id(void) { return 2u; }
 
 static int expect_rejected(const char *name,
                            const struct limine_mp_response *response) {

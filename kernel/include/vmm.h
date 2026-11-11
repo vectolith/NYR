@@ -51,7 +51,8 @@ bool nyr_vmm_enable_nx(void);
 /*
  * Map one 4 KiB page in the active address space. OWNED transfers a PMM frame
  * to the mapping on success; BORROWED leaves physical-page lifetime with the
- * caller. W+X mappings are rejected. Existing huge-page mappings are not split.
+ * caller. OWNED frames are PMM-claimed so free() rejects concurrent release.
+ * W+X mappings are rejected. Existing huge-page mappings are not split.
  */
 bool nyr_vmm_map_page(uint64_t hhdm_offset,
                       uint64_t virtual_address,

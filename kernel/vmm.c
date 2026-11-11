@@ -1,5 +1,6 @@
 #include "include/vmm.h"
 #include "include/memory.h"
+#include "include/lock.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +24,8 @@
 #define X86_EFER_MSR        UINT32_C(0xc0000080)
 #define X86_EFER_NXE        (UINT64_C(1) << 11)
 #define X86_CPUID_NX        (UINT32_C(1) << 20)
+
+static struct nyr_spinlock vmm_lock = NYR_SPINLOCK_INITIALIZER;
 
 static bool canonical_48(uint64_t address) {
     const uint64_t upper = address >> 48;
@@ -63,18 +66,6 @@ static uint64_t active_root(void) {
     uint64_t cr3;
     __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
     return cr3 & X86_PTE_ADDRESS;
-}
-
-static uint64_t irq_save_disable(void) {
-    uint64_t rflags;
-    __asm__ volatile ("pushfq; popq %0; cli"
-                      : "=r"(rflags) : : "memory");
-    return rflags;
-}
-
-static void irq_restore(uint64_t rflags) {
-    __asm__ volatile ("pushq %0; popfq"
-                      : : "r"(rflags) : "memory", "cc");
 }
 
 static void invalidate_page(uint64_t virtual_address) {
@@ -241,6 +232,7 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
 bool nyr_vmm_translate_current(uint64_t hhdm_offset,
                                uint64_t virtual_address,
                                struct nyr_vmm_translation *translation) {
+    const uint64_t irq_state = nyr_spin_lock_irqsave(&vmm_lock);
     return nyr_vmm_translate_from_root(active_root(), hhdm_offset,
                                        virtual_address, translation);
 }
@@ -260,16 +252,20 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
         ((flags & NYR_VMM_MAP_WRITE) != 0 &&
          (flags & NYR_VMM_MAP_EXECUTE) != 0) ||
         (ownership != NYR_VMM_PAGE_BORROWED &&
-         ownership != NYR_VMM_PAGE_OWNED) ||
-        (ownership == NYR_VMM_PAGE_OWNED &&
-         !nyr_pmm_frame_is_allocated(physical_address))) {
+         ownership != NYR_VMM_PAGE_OWNED)) {
         return false;
     }
 
-    const uint64_t irq_state = irq_save_disable();
+    const uint64_t irq_state = nyr_spin_lock_irqsave(&vmm_lock);
     volatile uint64_t *table = table_pointer(active_root(), hhdm_offset);
     if (table == NULL) {
-        irq_restore(irq_state);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
+        return false;
+    }
+
+    const bool claimed = ownership == NYR_VMM_PAGE_OWNED;
+    if (claimed && !nyr_pmm_claim_frame(physical_address)) {
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
 
@@ -343,7 +339,8 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
             (void)nyr_pmm_free_frame(created_frames[created_count]);
         }
     }
-    irq_restore(irq_state);
+    if (!success && claimed) (void)nyr_pmm_release_claim(physical_address);
+    nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
     return success;
 }
 
@@ -400,10 +397,10 @@ bool nyr_vmm_protect_page(uint64_t hhdm_offset,
         return false;
     }
 
-    const uint64_t irq_state = irq_save_disable();
+    const uint64_t irq_state = nyr_spin_lock_irqsave(&vmm_lock);
     volatile uint64_t *table = table_pointer(active_root(), hhdm_offset);
     if (table == NULL) {
-        irq_restore(irq_state);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
     const uint16_t indices[3] = {
@@ -421,12 +418,12 @@ bool nyr_vmm_protect_page(uint64_t hhdm_offset,
              (entry & X86_PTE_USER) == 0) ||
             ((flags & NYR_VMM_MAP_EXECUTE) != 0 &&
              (entry & X86_PTE_NO_EXECUTE) != 0)) {
-            irq_restore(irq_state);
+            nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
             return false;
         }
         table = table_pointer(entry & X86_PTE_ADDRESS, hhdm_offset);
         if (table == NULL) {
-            irq_restore(irq_state);
+            nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
             return false;
         }
     }
@@ -435,7 +432,7 @@ bool nyr_vmm_protect_page(uint64_t hhdm_offset,
     if (!read_present_entry(table,
                             (uint16_t)((virtual_address >> 12) & 0x1ffu),
                             &entry)) {
-        irq_restore(irq_state);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
     uint64_t replacement = entry &
@@ -445,7 +442,7 @@ bool nyr_vmm_protect_page(uint64_t hhdm_offset,
     if ((flags & NYR_VMM_MAP_EXECUTE) == 0) replacement |= X86_PTE_NO_EXECUTE;
     *leaf = replacement;
     invalidate_page(virtual_address);
-    irq_restore(irq_state);
+    nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
     return true;
 }
 
@@ -457,10 +454,10 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
         return false;
     }
 
-    const uint64_t irq_state = irq_save_disable();
+    const uint64_t irq_state = nyr_spin_lock_irqsave(&vmm_lock);
     volatile uint64_t *table = table_pointer(active_root(), hhdm_offset);
     if (table == NULL) {
-        irq_restore(irq_state);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
 
@@ -478,13 +475,13 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
         parent_entries[level] = &table[indices[level]];
         if (!read_present_entry(table, indices[level], &entry) ||
             (entry & X86_PTE_HUGE) != 0) {
-            irq_restore(irq_state);
+            nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
             return false;
         }
         child_physical[level] = entry & X86_PTE_ADDRESS;
         child_tables[level] = table_pointer(child_physical[level], hhdm_offset);
         if (child_tables[level] == NULL) {
-            irq_restore(irq_state);
+            nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
             return false;
         }
         table = child_tables[level];
@@ -494,7 +491,7 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
     if (!read_present_entry(table,
                             (uint16_t)((virtual_address >> 12) & 0x1ffu),
                             &entry)) {
-        irq_restore(irq_state);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
 
@@ -504,6 +501,13 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
                               : NYR_VMM_PAGE_BORROWED;
     *leaf = 0;
     invalidate_page(virtual_address);
+    if (unmapped->ownership == NYR_VMM_PAGE_OWNED &&
+        !nyr_pmm_release_claim(unmapped->physical_address)) {
+        *leaf = entry;
+        invalidate_page(virtual_address);
+        nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
+        return false;
+    }
 
     /* Reclaim only empty tables created and tagged by this VMM. */
     for (int level = 2; level >= 0; --level) {
@@ -516,7 +520,7 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
         (void)nyr_pmm_free_frame(child_physical[level]);
     }
 
-    irq_restore(irq_state);
+    nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
     return true;
 }
 

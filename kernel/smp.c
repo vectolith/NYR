@@ -1,6 +1,7 @@
 #include "include/smp.h"
 #include "include/limine.h"
 #include "include/vmm.h"
+#include "include/interrupts.h"
 #define NYR_SMP_MAX_CPUS UINT64_C(256)
 #define LIMINE_MP_KNOWN_FLAGS LIMINE_MP_RESPONSE_X86_64_X2APIC
 
@@ -8,6 +9,7 @@ struct nyr_smp_cpu_state {
     uint32_t processor_id;
     uint32_t lapic_id;
     uint32_t online;
+    uint32_t architecture_index;
 };
 static struct nyr_smp_cpu_state cpu_state[NYR_SMP_MAX_CPUS];
 static uint64_t configured_cpu_count;
@@ -16,7 +18,7 @@ static uint64_t failed_cpus;
 
 static __attribute__((noreturn)) void ap_park_forever(void) {
     __asm__ volatile ("cli" ::: "memory");
-    for (;;) __asm__ volatile ("pause" ::: "memory");
+    for (;;) __asm__ volatile ("hlt" ::: "memory");
 }
 
 static void nyr_smp_ap_entry(struct limine_mp_info *info) {
@@ -29,13 +31,16 @@ static void nyr_smp_ap_entry(struct limine_mp_info *info) {
     }
     struct nyr_smp_cpu_state *state = &cpu_state[index];
     if (state->processor_id != info->processor_id ||
-        state->lapic_id != info->lapic_id || !nyr_vmm_enable_nx()) {
+        state->lapic_id != info->lapic_id || !nyr_vmm_enable_nx() ||
+        !nyr_interrupts_init_cpu(state->architecture_index, info->lapic_id, false) ||
+        nyr_cpu_local_index() != state->architecture_index ||
+        nyr_cpu_local_lapic_id() != info->lapic_id) {
         __atomic_add_fetch(&failed_cpus, 1, __ATOMIC_RELEASE);
         ap_park_forever();
     }
     __atomic_store_n(&state->online, 1u, __ATOMIC_RELEASE);
     __atomic_add_fetch(&online_cpus, 1u, __ATOMIC_RELEASE);
-    /* APs remain interrupt-disabled until private descriptor state is installed. */
+    /* Keep APs parked until APIC routing, interrupt handlers and scheduling are ready. */
     ap_park_forever();
 }
 
@@ -74,7 +79,9 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
                        uint64_t spin_limit) {
     if (response == 0 || topology == 0 || response->cpus == 0 ||
         topology->cpu_count == 0 || topology->cpu_count > NYR_SMP_MAX_CPUS ||
-        response->cpu_count != topology->cpu_count || spin_limit == 0) return false;
+        response->cpu_count != topology->cpu_count || spin_limit == 0 ||
+        nyr_cpu_local_index() != 0u ||
+        nyr_cpu_local_lapic_id() != topology->bsp_lapic_id) return false;
     uint64_t bsp_index = UINT64_MAX;
     for (uint64_t i = 0; i < topology->cpu_count; ++i) {
         struct limine_mp_info *info = response->cpus[i];
@@ -91,9 +98,10 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
         struct limine_mp_info *info = response->cpus[i];
         cpu_state[i].processor_id = info->processor_id;
         cpu_state[i].lapic_id = info->lapic_id;
+        cpu_state[i].architecture_index = i < bsp_index ? (uint32_t)(i + 1u) : (uint32_t)i;
         __atomic_store_n(&cpu_state[i].online, 0u, __ATOMIC_RELAXED);
     }
-    __atomic_store_n(&configured_cpu_count, topology->cpu_count, __ATOMIC_RELAXED);
+    __atomic_store_n(&configured_cpu_count, topology->cpu_count, __ATOMIC_RELEASE);
     __atomic_store_n(&online_cpus, 1u, __ATOMIC_RELAXED);
     __atomic_store_n(&failed_cpus, 0u, __ATOMIC_RELAXED);
     __atomic_store_n(&cpu_state[bsp_index].online, 1u, __ATOMIC_RELEASE);

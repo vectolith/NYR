@@ -94,13 +94,6 @@ void nyr_kernel_main(void) {
     nyr_serial_init();
     nyr_serial_write("NYR: kernel entered\r\n");
 
-    nyr_interrupts_init();
-    if (!nyr_interrupts_self_test()) {
-        nyr_serial_write("NYR: interrupt self-test failed\r\n");
-        halt_forever();
-    }
-    nyr_serial_write("NYR: GDT and IDT initialized; breakpoint self-test passed\r\n");
-
     if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision)) {
         nyr_serial_write("NYR: unsupported Limine base revision\r\n");
         halt_forever();
@@ -122,6 +115,15 @@ void nyr_kernel_main(void) {
             ? "NYR: SMP topology reports x2APIC mode\r\n"
             : "NYR: SMP topology reports xAPIC mode\r\n");
     }
+
+    nyr_interrupts_init();
+    const uint32_t bsp_lapic_id = mp_response != 0 ? topology.bsp_lapic_id : 0u;
+    if (!nyr_interrupts_init_cpu(0u, bsp_lapic_id, true) ||
+        !nyr_interrupts_self_test()) {
+        nyr_serial_write("NYR: BSP descriptor/interrupt initialization failed\r\n");
+        halt_forever();
+    }
+    nyr_serial_write("NYR: BSP GDT, TSS, IDT and breakpoint self-test passed\r\n");
 
     struct limine_framebuffer_response *fb_response = framebuffer_request.response;
     if (fb_response != 0 && fb_response->framebuffer_count > 0 &&

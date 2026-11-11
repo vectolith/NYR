@@ -1,5 +1,6 @@
 #include "include/memory.h"
 #include "include/limine.h"
+#include "include/lock.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -14,7 +15,7 @@
  *   00 = not managed (reserved, bad, firmware, or outside usable RAM)
  *   01 = free
  *   10 = allocated
- *   11 = invalid
+ *   11 = claimed by a live VMM mapping
  *
  * This makes free() reject addresses in reserved memory instead of silently
  * turning them into allocatable frames.
@@ -22,6 +23,7 @@
 #define FRAME_STATE_UNMANAGED 0u
 #define FRAME_STATE_FREE      1u
 #define FRAME_STATE_ALLOCATED 2u
+#define FRAME_STATE_CLAIMED   3u
 
 static uint8_t *frame_states;
 static uint64_t frame_count;
@@ -32,6 +34,7 @@ static uint64_t managed_frames;
 static uint64_t free_frames;
 static uint64_t allocated_frames;
 static bool allocator_ready;
+static struct nyr_spinlock pmm_lock = NYR_SPINLOCK_INITIALIZER;
 
 static bool add_overflow_u64(uint64_t a, uint64_t b, uint64_t *out) {
     if (b > UINT64_MAX - a) {
@@ -254,80 +257,106 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
 }
 
 uint64_t nyr_pmm_alloc_frame(void) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
     if (!allocator_ready || free_frames == 0 || frame_count == 0) {
-        return 0;
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags); return 0;
     }
-
     uint64_t frame = next_hint;
     for (uint64_t scanned = 0; scanned < frame_count; ++scanned) {
         if (frame_state_get(frame) == FRAME_STATE_FREE) {
             frame_state_set(frame, FRAME_STATE_ALLOCATED);
-            --free_frames;
-            ++allocated_frames;
+            --free_frames; ++allocated_frames;
             next_hint = frame + 1u;
-            if (next_hint == frame_count) {
-                next_hint = 0;
-            }
-            return frame * NYR_PAGE_SIZE;
+            if (next_hint == frame_count) next_hint = 0;
+            const uint64_t result = frame * NYR_PAGE_SIZE;
+            nyr_spin_unlock_irqrestore(&pmm_lock, flags); return result;
         }
-
-        ++frame;
-        if (frame == frame_count) {
-            frame = 0;
-        }
+        if (++frame == frame_count) frame = 0;
     }
-
-    /* Keep counters honest if the bitmap and counters ever disagree. */
     free_frames = 0;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
     return 0;
 }
 
 bool nyr_pmm_free_frame(uint64_t physical_address) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
     if (!allocator_ready || (physical_address & NYR_PAGE_MASK) != 0) {
-        return false;
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags); return false;
     }
-
     const uint64_t frame = physical_address / NYR_PAGE_SIZE;
     if (frame >= frame_count ||
         (physical_address >= metadata_physical &&
-         physical_address - metadata_physical <
-             metadata_pages * NYR_PAGE_SIZE) ||
+         physical_address - metadata_physical < metadata_pages * NYR_PAGE_SIZE) ||
         frame_state_get(frame) != FRAME_STATE_ALLOCATED) {
-        return false;
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags); return false;
     }
-
     frame_state_set(frame, FRAME_STATE_FREE);
-    ++free_frames;
-    --allocated_frames;
-    if (frame < next_hint) {
-        next_hint = frame;
-    }
+    ++free_frames; --allocated_frames;
+    if (frame < next_hint) next_hint = frame;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
     return true;
 }
 
+bool nyr_pmm_claim_frame(uint64_t physical_address) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    bool claimed = false;
+    if (allocator_ready && (physical_address & NYR_PAGE_MASK) == 0) {
+        const uint64_t frame = physical_address / NYR_PAGE_SIZE;
+        if (frame < frame_count &&
+            !(physical_address >= metadata_physical &&
+              physical_address - metadata_physical < metadata_pages * NYR_PAGE_SIZE) &&
+            frame_state_get(frame) == FRAME_STATE_ALLOCATED) {
+            frame_state_set(frame, FRAME_STATE_CLAIMED);
+            claimed = true;
+        }
+    }
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return claimed;
+}
+
+bool nyr_pmm_release_claim(uint64_t physical_address) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    bool released = false;
+    if (allocator_ready && (physical_address & NYR_PAGE_MASK) == 0) {
+        const uint64_t frame = physical_address / NYR_PAGE_SIZE;
+        if (frame < frame_count && frame_state_get(frame) == FRAME_STATE_CLAIMED) {
+            frame_state_set(frame, FRAME_STATE_ALLOCATED);
+            released = true;
+        }
+    }
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return released;
+}
+
 bool nyr_pmm_frame_is_allocated(uint64_t physical_address) {
-    if (!allocator_ready || (physical_address & NYR_PAGE_MASK) != 0) {
-        return false;
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    bool result = false;
+    if (allocator_ready && (physical_address & NYR_PAGE_MASK) == 0) {
+        const uint64_t frame = physical_address / NYR_PAGE_SIZE;
+        result = frame < frame_count &&
+            !(physical_address >= metadata_physical &&
+              physical_address - metadata_physical < metadata_pages * NYR_PAGE_SIZE) &&
+            (frame_state_get(frame) == FRAME_STATE_ALLOCATED ||
+             frame_state_get(frame) == FRAME_STATE_CLAIMED);
     }
-    const uint64_t frame = physical_address / NYR_PAGE_SIZE;
-    if (frame >= frame_count ||
-        (physical_address >= metadata_physical &&
-         physical_address - metadata_physical < metadata_pages * NYR_PAGE_SIZE)) {
-        return false;
-    }
-    return frame_state_get(frame) == FRAME_STATE_ALLOCATED;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return result;
 }
 
 uint64_t nyr_pmm_managed_frames(void) {
-    return allocator_ready ? managed_frames : 0;
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    const uint64_t value = allocator_ready ? managed_frames : 0;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags); return value;
 }
-
 uint64_t nyr_pmm_free_frames(void) {
-    return allocator_ready ? free_frames : 0;
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    const uint64_t value = allocator_ready ? free_frames : 0;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags); return value;
 }
-
 uint64_t nyr_pmm_allocated_frames(void) {
-    return allocator_ready ? allocated_frames : 0;
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    const uint64_t value = allocator_ready ? allocated_frames : 0;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags); return value;
 }
 
 bool nyr_pmm_self_test(void) {
@@ -359,9 +388,12 @@ bool nyr_pmm_self_test(void) {
     }
 
     const uint64_t recycled = nyr_pmm_alloc_frame();
-    if (recycled == 0 || !nyr_pmm_free_frame(recycled)) {
-        return false;
-    }
+    if (recycled == 0 || !nyr_pmm_claim_frame(recycled) ||
+        nyr_pmm_free_frame(recycled) ||
+        !nyr_pmm_frame_is_allocated(recycled) ||
+        !nyr_pmm_release_claim(recycled) ||
+        nyr_pmm_release_claim(recycled) ||
+        !nyr_pmm_free_frame(recycled)) return false;
 
     return free_frames == before;
 }

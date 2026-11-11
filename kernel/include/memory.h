@@ -10,7 +10,7 @@ struct limine_memmap_response;
  * Initialise the physical frame allocator from the Limine memory map.
  * Only complete pages wholly contained in LIMINE_MEMMAP_USABLE regions are
  * eligible. The bitmap itself is carved out of a usable region and reserved.
- * This implementation is single-CPU until interrupt-safe locking is added.
+ * Allocator mutations and accounting queries are serialized by an IRQ-saving SMP spinlock.
  */
 bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
                   uint64_t hhdm_offset);
@@ -25,7 +25,11 @@ uint64_t nyr_pmm_managed_frames(void);
 uint64_t nyr_pmm_free_frames(void);
 uint64_t nyr_pmm_allocated_frames(void);
 
-/* True only for a live PMM allocation, excluding allocator metadata pages. */
+/* Claim prevents free while a VMM-owned mapping references the frame. */
+bool nyr_pmm_claim_frame(uint64_t physical_address);
+bool nyr_pmm_release_claim(uint64_t physical_address);
+
+/* True for allocated or VMM-claimed frames, excluding allocator metadata. */
 bool nyr_pmm_frame_is_allocated(uint64_t physical_address);
 
 /* A deterministic allocator self-test intended for early boot diagnostics. */
