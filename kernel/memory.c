@@ -34,21 +34,30 @@ static uint64_t free_frames;
 static uint64_t allocated_frames;
 static bool allocator_ready;
 
-static void pmm_serial_write(const char *text) {
-    while (*text != '\0') {
-        unsigned int timeout = 1000000;
-        uint8_t status = 0;
-        do {
-            __asm__ volatile ("inb %1, %0" : "=a"(status) : "Nd"((uint16_t)0x3fd));
-            if (status & 0x20u) break;
-        } while (--timeout != 0);
-        if (timeout != 0) {
-            __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)*text), "Nd"((uint16_t)0x3f8));
-        }
-        ++text;
+static inline void pmm_outb(uint16_t port, uint8_t value) {
+    __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
+static inline uint8_t pmm_inb(uint16_t port) {
+    uint8_t value;
+    __asm__ volatile ("inb %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
+
+static void pmm_serial_putc(char c) {
+    unsigned int timeout = 1000000;
+    while (!(pmm_inb(0x3fd) & 0x20u) && --timeout) {
+    }
+    if (timeout != 0) {
+        pmm_outb(0x3f8, (uint8_t)c);
     }
 }
 
+static void pmm_serial_write(const char *text) {
+    while (*text != '\0') {
+        pmm_serial_putc(*text++);
+    }
+}
 static bool add_overflow_u64(uint64_t a, uint64_t b, uint64_t *out) {
     if (b > UINT64_MAX - a) {
         return true;
