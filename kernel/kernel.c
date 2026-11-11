@@ -156,23 +156,6 @@ void nyr_kernel_main(void) {
     serial_write_hex(hhdm->offset);
     serial_write("\r\n");
     serial_line("NYR: Limine memory-map entry count ", memory_map->entry_count);
-    if (memory_map->entry_count > 0 && memory_map->entry_count <= 32 &&
-        memory_map->entries != 0) {
-        for (uint64_t i = 0; i < memory_map->entry_count; ++i) {
-            struct limine_memmap_entry *entry = memory_map->entries[i];
-            if (entry == 0) {
-                serial_write("NYR: memory-map entry pointer is null\r\n");
-                break;
-            }
-            serial_write("NYR: memmap base ");
-            serial_write_hex(entry->base);
-            serial_write(" length ");
-            serial_write_hex(entry->length);
-            serial_write(" type ");
-            serial_write_u64(entry->type);
-            serial_write("\r\n");
-        }
-    }
     serial_write("NYR: starting physical memory manager\r\n");
 
     if (!nyr_pmm_init(memory_map, hhdm->offset)) {
@@ -180,9 +163,7 @@ void nyr_kernel_main(void) {
         halt_forever();
     }
 
-    serial_write("NYR: PMM initialization returned\\r\\n");
     static struct nyr_pmm_stats stats;
-    serial_write("NYR: requesting PMM statistics\\r\\n");
     if (!nyr_pmm_get_stats(&stats)) {
         serial_write("NYR: physical memory manager statistics unavailable\r\n");
         halt_forever();

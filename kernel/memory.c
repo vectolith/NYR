@@ -34,21 +34,6 @@ static uint64_t free_frames;
 static uint64_t allocated_frames;
 static bool allocator_ready;
 
-static void pmm_serial_write(const char *text) {
-    while (*text != '\0') {
-        unsigned int timeout = 1000000;
-        uint8_t status = 0;
-        do {
-            __asm__ volatile ("inb %1, %0" : "=a"(status) : "Nd"((uint16_t)0x3fd));
-            if (status & 0x20u) break;
-        } while (--timeout != 0);
-        if (timeout != 0) {
-            __asm__ volatile ("outb %0, %1" : : "a"((uint8_t)*text), "Nd"((uint16_t)0x3f8));
-        }
-        ++text;
-    }
-}
-
 static bool add_overflow_u64(uint64_t a, uint64_t b, uint64_t *out) {
     if (b > UINT64_MAX - a) {
         return true;
@@ -124,14 +109,11 @@ static bool map_entry(const struct limine_memmap_response *map,
 
 bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
                   uint64_t hhdm_offset) {
-    pmm_serial_write("NYR: PMM init entered\r\n");
     if (allocator_ready || memory_map == NULL ||
         memory_map->entries == NULL || memory_map->entry_count == 0 ||
         memory_map->entry_count > NYR_MAX_MAP_ENTRIES) {
-        pmm_serial_write("NYR: PMM invalid memory-map response\r\n");
         return false;
     }
-    pmm_serial_write("NYR: PMM memory-map response accepted\r\n");
 
     uint64_t highest_usable_address = 0;
     for (uint64_t i = 0; i < memory_map->entry_count; ++i) {
@@ -139,7 +121,6 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         uint64_t end;
         if (!map_entry(memory_map, i, &entry) || entry->length == 0 ||
             add_overflow_u64(entry->base, entry->length, &end)) {
-            pmm_serial_write("NYR: PMM malformed memory-map entry\r\n");
             return false;
         }
 
@@ -150,7 +131,6 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
             if (!map_entry(memory_map, j, &previous) ||
                 add_overflow_u64(previous->base, previous->length, &previous_end) ||
                 (entry->base < previous_end && previous->base < end)) {
-                pmm_serial_write("NYR: PMM overlapping memory-map entries\r\n");
                 return false;
             }
         }
@@ -162,10 +142,8 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     }
 
     if (highest_usable_address <= NYR_LOW_MEMORY_END) {
-        pmm_serial_write("NYR: PMM no usable memory above 1 MiB\r\n");
         return false;
     }
-    pmm_serial_write("NYR: PMM usable memory range found\r\n");
 
     frame_count = highest_usable_address / NYR_PAGE_SIZE;
     if ((highest_usable_address & NYR_PAGE_MASK) != 0) {
@@ -209,10 +187,8 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         }
     }
     if (!metadata_found) {
-        pmm_serial_write("NYR: PMM no space for frame-state metadata\r\n");
         return false;
     }
-    pmm_serial_write("NYR: PMM metadata placement found\r\n");
 
     uint64_t metadata_bytes;
     if (required_pages > UINT64_MAX / NYR_PAGE_SIZE) {
@@ -233,7 +209,6 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         frame_states[i] = 0;
     }
 
-    pmm_serial_write("NYR: PMM frame-state storage cleared\r\n");
     managed_frames = 0;
     free_frames = 0;
     allocated_frames = 0;
@@ -262,7 +237,6 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         }
     }
 
-    pmm_serial_write("NYR: PMM usable frames marked\r\n");
     const uint64_t metadata_first = metadata_physical / NYR_PAGE_SIZE;
     for (uint64_t i = 0; i < metadata_pages; ++i) {
         const uint64_t frame = metadata_first + i;
@@ -275,10 +249,8 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         ++allocated_frames;
     }
 
-    pmm_serial_write("NYR: PMM metadata reserved\r\n");
     next_hint = 0;
     allocator_ready = true;
-    pmm_serial_write("NYR: PMM initialization complete\r\n");
     return true;
 }
 
@@ -335,19 +307,13 @@ bool nyr_pmm_free_frame(uint64_t physical_address) {
 }
 
 bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats) {
-    pmm_serial_write("NYR: PMM stats function entered\r\n");
     if (!allocator_ready || stats == NULL) {
-        pmm_serial_write("NYR: PMM stats invalid state or pointer\r\n");
         return false;
     }
 
-    pmm_serial_write("NYR: PMM stats writing managed count\r\n");
     stats->managed_frames = managed_frames;
-    pmm_serial_write("NYR: PMM stats writing free count\r\n");
     stats->free_frames = free_frames;
-    pmm_serial_write("NYR: PMM stats writing allocated count\r\n");
     stats->allocated_frames = allocated_frames;
-    pmm_serial_write("NYR: PMM stats function returning\r\n");
     return true;
 }
 
@@ -359,7 +325,9 @@ bool nyr_pmm_self_test(void) {
 
     if (first == 0 || second == 0 || third == 0 ||
         first == second || first == third || second == third ||
-        nyr_pmm_free_frame(0) || nyr_pmm_free_frame(first + 1u) ||
+        nyr_pmm_free_frame(0) ||
+        nyr_pmm_free_frame(metadata_physical) ||
+        nyr_pmm_free_frame(first + 1u) ||
         (first & NYR_PAGE_MASK) != 0 ||
         (second & NYR_PAGE_MASK) != 0 ||
         (third & NYR_PAGE_MASK) != 0) {
