@@ -148,15 +148,19 @@ bool nyr_interrupts_init_cpu(uint32_t cpu_index, uint32_t lapic_id, bool bootstr
         .limit = (uint16_t)(sizeof(idt) - 1u),
         .base = (uint64_t)(uintptr_t)idt
     };
-    nyr_load_gdt(&gdtr);
-    nyr_load_task_register();
-    nyr_load_idt(&idtr);
-
+    /*
+     * Install GS-based CPU-local state before loading our IDT. If an NMI
+     * arrives after LIDT, the dispatcher must never dereference an unset GS.
+     * Keep the bootloader IDT active until GDT/TR/GS are all ready.
+     */
     const uint64_t gs_base = (uint64_t)(uintptr_t)local;
     __asm__ volatile ("wrmsr" : : "c"(IA32_GS_BASE),
                       "a"((uint32_t)gs_base), "d"((uint32_t)(gs_base >> 32))
                       : "memory");
+    nyr_load_gdt(&gdtr);
+    nyr_load_task_register();
     __atomic_store_n(&local->architecture_ready, 1u, __ATOMIC_RELEASE);
+    nyr_load_idt(&idtr);
     return true;
 }
 
