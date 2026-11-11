@@ -190,6 +190,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
         translation->writable = writable;
         translation->user_accessible = user_accessible;
         translation->executable = executable;
+        translation->uncached =
+            (entry & (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE)) ==
+            (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE);
         return true;
     }
 
@@ -210,6 +213,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
         translation->writable = writable;
         translation->user_accessible = user_accessible;
         translation->executable = executable;
+        translation->uncached =
+            (entry & (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE)) ==
+            (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE);
         return true;
     }
 
@@ -228,6 +234,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
     translation->writable = writable;
     translation->user_accessible = user_accessible;
     translation->executable = executable;
+    translation->uncached =
+        (entry & (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE)) ==
+        (X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE);
     return true;
 }
 

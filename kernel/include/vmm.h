@@ -10,6 +10,7 @@ struct nyr_vmm_translation {
     bool writable;
     bool user_accessible;
     bool executable;
+    bool uncached;
 };
 
 /*

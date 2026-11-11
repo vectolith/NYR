@@ -10,6 +10,8 @@
 #define P UINT64_C(0x001)
 #define RW UINT64_C(0x002)
 #define US UINT64_C(0x004)
+#define PWT UINT64_C(0x008)
+#define PCD UINT64_C(0x010)
 #define PS UINT64_C(0x080)
 #define NX (UINT64_C(1) << 63)
 
@@ -28,13 +30,13 @@ static int setup(void) {
 }
 
 static int test_4k(void) {
-    tables[1536 + 1] = UINT64_C(0x5000) | P | RW | US;
+    tables[1536 + 1] = UINT64_C(0x5000) | P | RW | US | PWT | PCD;
     struct nyr_vmm_translation result;
     if (!nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
                                      UINT64_C(0x1123), &result) ||
         result.physical_address != UINT64_C(0x5123) ||
         result.page_size != PAGE_SIZE || !result.writable ||
-        !result.user_accessible || !result.executable) {
+        !result.user_accessible || !result.executable || !result.uncached) {
         fputs("host VMM test: 4 KiB translation failed\n", stderr);
         return 1;
     }
@@ -59,12 +61,12 @@ static int test_effective_permissions(void) {
 }
 
 static int test_2m(void) {
-    tables[1024 + 1] = UINT64_C(0x800000) | P | RW | PS;
+    tables[1024 + 1] = UINT64_C(0x800000) | P | RW | PS | PWT | PCD;
     struct nyr_vmm_translation result;
     if (!nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
                                      UINT64_C(0x212345), &result) ||
         result.physical_address != UINT64_C(0x812345) ||
-        result.page_size != (UINT64_C(1) << 21)) {
+        result.page_size != (UINT64_C(1) << 21) || !result.uncached) {
         fputs("host VMM test: 2 MiB translation failed\n", stderr);
         return 1;
     }

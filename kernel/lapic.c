@@ -3,6 +3,7 @@
 #include "include/vmm.h"
 
 #define IA32_APIC_BASE UINT32_C(0x1b)
+#define IA32_PAT UINT32_C(0x277)
 #define APIC_BASE_ENABLE (UINT64_C(1) << 11)
 #define APIC_BASE_X2APIC (UINT64_C(1) << 10)
 #define APIC_BASE_ADDRESS UINT64_C(0x000ffffffffff000)
@@ -10,6 +11,7 @@
 #define NYR_LAPIC_VIRTUAL_BASE UINT64_C(0xfffffe0000000000)
 #define NYR_LAPIC_MAX_CPUS 256u
 #define CPUID_APIC (UINT32_C(1) << 9)
+#define CPUID_PAT (UINT32_C(1) << 16)
 #define CPUID_X2APIC (UINT32_C(1) << 21)
 #define XAPIC_ID 0x020u
 #define XAPIC_VERSION 0x030u
@@ -44,6 +46,7 @@
 static bool lapic_prepared;
 static bool lapic_x2apic;
 static uint64_t lapic_physical_base;
+static uint64_t lapic_hhdm_offset;
 static volatile uint32_t *lapic_mmio;
 static uint32_t nmi_pending[NYR_LAPIC_MAX_CPUS];
 static uint64_t nmi_acknowledged[NYR_LAPIC_MAX_CPUS];
@@ -83,6 +86,15 @@ static void lapic_write_register(uint32_t xapic_offset, uint32_t x2apic_msr,
 static bool set_apic_base_for_cpu(void) {
     bool has_x2apic = false;
     if (!cpu_has_apic(&has_x2apic) || (lapic_x2apic && !has_x2apic)) return false;
+    if (!lapic_x2apic) {
+        uint32_t a, b, c, d;
+        __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d)
+                          : "a"(1u), "c"(0u));
+        (void)a; (void)b; (void)c;
+        /* PWT+PCD selects PAT entry 3; require that entry to be architectural UC. */
+        if ((d & CPUID_PAT) == 0 || ((read_msr(IA32_PAT) >> 24) & 0xffu) != 0u)
+            return false;
+    }
     uint64_t base = read_msr(IA32_APIC_BASE);
     if ((base & APIC_BASE_ADDRESS) != lapic_physical_base) return false;
     if (lapic_x2apic) base |= APIC_BASE_ENABLE | APIC_BASE_X2APIC;
@@ -100,6 +112,7 @@ bool nyr_lapic_prepare(uint64_t hhdm_offset, bool x2apic) {
     if (lapic_prepared || !cpu_has_apic(&has_x2apic) ||
         (x2apic && !has_x2apic)) return false;
     lapic_x2apic = x2apic;
+    lapic_hhdm_offset = hhdm_offset;
     uint64_t base = read_msr(IA32_APIC_BASE);
     lapic_physical_base = base & APIC_BASE_ADDRESS;
     if (lapic_physical_base == 0 ||
@@ -121,6 +134,16 @@ bool nyr_lapic_prepare(uint64_t hhdm_offset, bool x2apic) {
 
 bool nyr_lapic_init_cpu(uint32_t expected_lapic_id) {
     if (!lapic_prepared || !set_apic_base_for_cpu()) return false;
+    if (!lapic_x2apic) {
+        struct nyr_vmm_translation mapping;
+        if (!nyr_vmm_translate_current(lapic_hhdm_offset,
+                                       NYR_LAPIC_VIRTUAL_BASE, &mapping) ||
+            mapping.physical_address != lapic_physical_base ||
+            mapping.page_size != 4096u || !mapping.writable ||
+            mapping.user_accessible || mapping.executable || !mapping.uncached) {
+            return false;
+        }
+    }
     const uint64_t id = lapic_read_register(XAPIC_ID, X2APIC_ID);
     const uint32_t actual_id = lapic_x2apic ? (uint32_t)id : (uint32_t)(id >> 24);
     if (actual_id != expected_lapic_id) return false;
