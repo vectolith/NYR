@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "include/limine.h"
+#include "include/memory.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -14,6 +15,20 @@ static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(6);
 LIMINE_REQUEST
 static volatile struct limine_framebuffer_request framebuffer_request = {
     .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
+    .revision = 0,
+    .response = 0
+};
+
+LIMINE_REQUEST
+static volatile struct limine_hhdm_request hhdm_request = {
+    .id = LIMINE_HHDM_REQUEST_ID,
+    .revision = 0,
+    .response = 0
+};
+
+LIMINE_REQUEST
+static volatile struct limine_memmap_request memory_map_request = {
+    .id = LIMINE_MEMMAP_REQUEST_ID,
     .revision = 0,
     .response = 0
 };
@@ -56,6 +71,36 @@ static void serial_write(const char *text) {
     }
 }
 
+static void serial_write_u64(uint64_t value) {
+    char digits[20];
+    unsigned int count = 0;
+    if (value == 0) {
+        serial_putc('0');
+        return;
+    }
+    while (value != 0 && count < sizeof(digits)) {
+        digits[count++] = (char)('0' + (value % 10u));
+        value /= 10u;
+    }
+    while (count != 0) {
+        serial_putc(digits[--count]);
+    }
+}
+
+static void serial_write_hex(uint64_t value) {
+    static const char hex[] = "0123456789abcdef";
+    serial_write("0x");
+    for (int shift = 60; shift >= 0; shift -= 4) {
+        serial_putc(hex[(value >> shift) & 0xfu]);
+    }
+}
+
+static void serial_line(const char *label, uint64_t value) {
+    serial_write(label);
+    serial_write_u64(value);
+    serial_write("\r\n");
+}
+
 static void framebuffer_fill(struct limine_framebuffer *fb, uint32_t pixel) {
     volatile uint32_t *pixels = (volatile uint32_t *)fb->address;
     const uint64_t stride = fb->pitch / sizeof(uint32_t);
@@ -67,6 +112,12 @@ static void framebuffer_fill(struct limine_framebuffer *fb, uint32_t pixel) {
     }
 }
 
+static __attribute__((noreturn)) void halt_forever(void) {
+    for (;;) {
+        __asm__ volatile ("cli; hlt");
+    }
+}
+
 __attribute__((noreturn))
 void nyr_kernel_main(void) {
     serial_init();
@@ -74,15 +125,13 @@ void nyr_kernel_main(void) {
 
     if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision)) {
         serial_write("NYR: unsupported Limine base revision\r\n");
-        for (;;) {
-            __asm__ volatile ("cli; hlt");
-        }
+        halt_forever();
     }
 
-    struct limine_framebuffer_response *response = framebuffer_request.response;
-    if (response != 0 && response->framebuffer_count > 0 &&
-        response->framebuffers != 0 && response->framebuffers[0] != 0) {
-        struct limine_framebuffer *fb = response->framebuffers[0];
+    struct limine_framebuffer_response *fb_response = framebuffer_request.response;
+    if (fb_response != 0 && fb_response->framebuffer_count > 0 &&
+        fb_response->framebuffers != 0 && fb_response->framebuffers[0] != 0) {
+        struct limine_framebuffer *fb = fb_response->framebuffers[0];
 
         if (fb->address != 0 && fb->bpp == 32 &&
             fb->memory_model == LIMINE_FRAMEBUFFER_RGB &&
@@ -96,8 +145,37 @@ void nyr_kernel_main(void) {
         serial_write("NYR: framebuffer unavailable\r\n");
     }
 
-    serial_write("NYR: boot milestone reached; idle halt loop\r\n");
-    for (;;) {
-        __asm__ volatile ("cli; hlt");
+    struct limine_hhdm_response *hhdm = hhdm_request.response;
+    struct limine_memmap_response *memory_map = memory_map_request.response;
+    if (hhdm == 0 || memory_map == 0) {
+        serial_write("NYR: memory map or HHDM response unavailable\r\n");
+        halt_forever();
     }
+
+    serial_write("NYR: HHDM offset ");
+    serial_write_hex(hhdm->offset);
+    serial_write("\r\n");
+
+    if (!nyr_pmm_init(memory_map, hhdm->offset)) {
+        serial_write("NYR: physical memory manager initialization failed\r\n");
+        halt_forever();
+    }
+
+    struct nyr_pmm_stats stats;
+    if (!nyr_pmm_get_stats(&stats)) {
+        serial_write("NYR: physical memory manager statistics unavailable\r\n");
+        halt_forever();
+    }
+
+    serial_line("NYR: PMM managed frames ", stats.managed_frames);
+    serial_line("NYR: PMM free frames ", stats.free_frames);
+    serial_line("NYR: PMM allocated frames ", stats.allocated_frames);
+
+    if (!nyr_pmm_self_test()) {
+        serial_write("NYR: PMM self-test failed\r\n");
+        halt_forever();
+    }
+    serial_write("NYR: PMM self-test passed\r\n");
+    serial_write("NYR: boot milestone reached; idle halt loop\r\n");
+    halt_forever();
 }

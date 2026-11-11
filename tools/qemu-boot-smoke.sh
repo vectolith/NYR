@@ -17,6 +17,14 @@ timeout 15s qemu-system-x86_64 -machine q35 -m 512M -cpu qemu64 \
 STATUS=$?
 set -e
 cat "$LOG" || true
-grep -q "NYR: kernel entered" "$LOG" || { echo "Kernel entry marker missing (QEMU status $STATUS)" >&2; exit 1; }
-grep -q "NYR: framebuffer initialized" "$LOG" || { echo "Framebuffer marker missing" >&2; exit 1; }
-echo "UEFI boot smoke test passed"
+for marker in \
+  "NYR: kernel entered" \
+  "NYR: framebuffer initialized" \
+  "NYR: PMM self-test passed" \
+  "NYR: boot milestone reached; idle halt loop"; do
+  grep -Fq "$marker" "$LOG" || {
+    echo "Missing boot marker: $marker (QEMU status $STATUS)" >&2
+    exit 1
+  }
+done
+echo "UEFI boot and PMM smoke test passed"
