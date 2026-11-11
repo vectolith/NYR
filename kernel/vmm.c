@@ -233,8 +233,10 @@ bool nyr_vmm_translate_current(uint64_t hhdm_offset,
                                uint64_t virtual_address,
                                struct nyr_vmm_translation *translation) {
     const uint64_t irq_state = nyr_spin_lock_irqsave(&vmm_lock);
-    return nyr_vmm_translate_from_root(active_root(), hhdm_offset,
-                                       virtual_address, translation);
+    const bool result = nyr_vmm_translate_from_root(
+        active_root(), hhdm_offset, virtual_address, translation);
+    nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
+    return result;
 }
 
 bool nyr_vmm_map_page(uint64_t hhdm_offset,
