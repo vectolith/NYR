@@ -94,7 +94,8 @@ void nyr_interrupts_init(void) {
     gdt[1] = UINT64_C(0x00af9a000000ffff);
     gdt[2] = UINT64_C(0x00cf92000000ffff);
 
-    tss.rsp0 = (uint64_t)(uintptr_t)double_fault_stack + sizeof(double_fault_stack);
+    extern char stack_top[];
+    tss.rsp0 = (uint64_t)(uintptr_t)stack_top;
     tss.ist1 = (uint64_t)(uintptr_t)double_fault_stack + sizeof(double_fault_stack);
     tss.iomap_base = (uint16_t)sizeof(tss);
     set_tss_descriptor((uint64_t)(uintptr_t)&tss, (uint32_t)sizeof(tss) - 1u);

@@ -35,19 +35,19 @@ nyr_load_idt:
 .extern nyr_exception_dispatch
 
 .macro ISR_NOERR number
-.global nyr_isr\\number
-.type nyr_isr\\number, @function
-nyr_isr\\number:
+.global nyr_isr\number
+.type nyr_isr\number, @function
+nyr_isr\number:
     pushq $0
-    pushq $\\number
+    pushq $\number
     jmp nyr_isr_common
 .endm
 
 .macro ISR_ERROR number
-.global nyr_isr\\number
-.type nyr_isr\\number, @function
-nyr_isr\\number:
-    pushq $\\number
+.global nyr_isr\number
+.type nyr_isr\number, @function
+nyr_isr\number:
+    pushq $\number
     jmp nyr_isr_common
 .endm
 
