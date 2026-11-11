@@ -19,8 +19,20 @@ build/memory.o: kernel/memory.c kernel/include/memory.h kernel/include/limine.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o -o $@
+build/serial.o: kernel/serial.c kernel/include/serial.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/interrupts.o: kernel/interrupts.c kernel/include/interrupts.h kernel/include/serial.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/interrupts_asm.o: kernel/interrupts.S
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
+
+build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/serial.o build/interrupts.o build/interrupts_asm.o kernel/linker.ld
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
 
 iso: all
 	@bash tools/build-iso.sh
