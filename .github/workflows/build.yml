@@ -24,7 +24,7 @@ jobs:
       - name: Configure immutable Ubuntu package snapshot
         run: |
           . ./toolchain.lock
-          printf 'APT::Snapshot "%s";\\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+          printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
       - name: Install pinned build and emulator dependencies
         run: |
           apt-get update
@@ -34,14 +34,14 @@ jobs:
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-          dpkg-query -W -f='${binary:Package}=${Version}\\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
+          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
       - run: make preflight
       - name: Run host-side memory manager tests
-        run: make -j4 test-host
+        run: make -j"$NYR_JOBS" test-host
       - name: Build kernel and UEFI ISO
         run: |
           make clean
-          make -j4 all iso
+          make -j"$NYR_JOBS" all iso
       - name: Verify ELF and ISO artifacts
         run: |
           file build/nyr-kernel.elf build/nyr-uefi.iso

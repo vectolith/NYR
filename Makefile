@@ -1,5 +1,4 @@
 NYR_TOOLS_MOUNT ?= /mnt/tools
-NYR_JOBS ?= $(shell nproc 2>/dev/null | awk '{ if ($$1 < 1) print 1; else if ($$1 > 4) print 4; else print $$1 }')
 RUN_WITH_TOOLS = NYR_TOOLS_MOUNT=$(NYR_TOOLS_MOUNT) ./tools/with-tools.sh
 CC ?= cc
 LD ?= ld
