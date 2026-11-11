@@ -341,8 +341,11 @@ bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats) {
         return false;
     }
 
+    pmm_serial_write("NYR: PMM stats writing managed count\r\n");
     stats->managed_frames = managed_frames;
+    pmm_serial_write("NYR: PMM stats writing free count\r\n");
     stats->free_frames = free_frames;
+    pmm_serial_write("NYR: PMM stats writing allocated count\r\n");
     stats->allocated_frames = allocated_frames;
     pmm_serial_write("NYR: PMM stats function returning\r\n");
     return true;

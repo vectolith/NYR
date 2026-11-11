@@ -181,7 +181,7 @@ void nyr_kernel_main(void) {
     }
 
     serial_write("NYR: PMM initialization returned\\r\\n");
-    struct nyr_pmm_stats stats;
+    static struct nyr_pmm_stats stats;
     serial_write("NYR: requesting PMM statistics\\r\\n");
     if (!nyr_pmm_get_stats(&stats)) {
         serial_write("NYR: physical memory manager statistics unavailable\r\n");
