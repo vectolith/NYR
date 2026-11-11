@@ -754,18 +754,18 @@ bool nyr_vmm_smp_benchmark(uint64_t hhdm_offset) {
 
     nyr_serial_write("NYR: VMM map+shootdown average TSC ticks ");
     nyr_serial_write_u64(map_ticks / ITERATIONS);
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     nyr_serial_write("NYR: VMM protect+shootdown average TSC ticks ");
     nyr_serial_write_u64(protect_ticks / ITERATIONS);
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     nyr_serial_write("NYR: VMM unmap+reclaim average TSC ticks ");
     nyr_serial_write_u64(unmap_ticks / ITERATIONS);
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     nyr_serial_write("NYR: remote TLB invalidate average TSC ticks ");
     nyr_serial_write_u64(shootdown_ticks / ITERATIONS);
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     nyr_serial_write("NYR: remote full TLB flush average TSC ticks ");
     nyr_serial_write_u64(flush_ticks / ITERATIONS);
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     return true;
 }

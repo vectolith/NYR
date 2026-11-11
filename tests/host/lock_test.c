@@ -39,7 +39,7 @@ int main(void) {
     }
     const uint64_t elapsed = monotonic_ns() - start;
     const uint64_t operations = (uint64_t)THREADS * ITERATIONS;
-    printf("host lock benchmark: threads=%u operations=%llu ns_per_operation=%llu\\n",
+    printf("host lock benchmark: threads=%u operations=%llu ns_per_operation=%llu\n",
            THREADS, (unsigned long long)operations,
            (unsigned long long)(elapsed / operations));
     puts("host lock test: contended multi-threaded spinlock passed");

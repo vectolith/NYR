@@ -190,7 +190,7 @@ void nyr_kernel_main(void) {
     for (unsigned int i = 0; i < PMM_BENCH_FRAMES; ++i) {
         benchmark_frames[i] = nyr_pmm_alloc_frame();
         if (benchmark_frames[i] == 0) {
-            nyr_serial_write("NYR: PMM benchmark allocation failed\\r\\n");
+            nyr_serial_write("NYR: PMM benchmark allocation failed\r\n");
             halt_forever();
         }
     }
@@ -200,7 +200,7 @@ void nyr_kernel_main(void) {
     benchmark_start = read_tsc_ordered();
     for (unsigned int i = 0; i < PMM_BENCH_FRAMES; ++i) {
         if (!nyr_pmm_free_frame(benchmark_frames[i])) {
-            nyr_serial_write("NYR: PMM benchmark release failed\\r\\n");
+            nyr_serial_write("NYR: PMM benchmark release failed\r\n");
             halt_forever();
         }
     }
@@ -237,10 +237,10 @@ void nyr_kernel_main(void) {
         }
         nyr_serial_write("NYR: remote TLB shootdown self-test passed\r\n");
         if (!nyr_vmm_smp_benchmark(hhdm->offset)) {
-            nyr_serial_write("NYR: VMM/TLB benchmark failed\\r\\n");
+            nyr_serial_write("NYR: VMM/TLB benchmark failed\r\n");
             halt_forever();
         }
-        nyr_serial_write("NYR: VMM/TLB benchmark completed\\r\\n");
+        nyr_serial_write("NYR: VMM/TLB benchmark completed\r\n");
         nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
