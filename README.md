@@ -57,3 +57,17 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 3. Virtual memory manager and heap.
 4. Scheduler, processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.
+
+
+## Physical memory manager
+
+The early physical page-frame allocator consumes Limine's memory-map and HHDM responses.
+
+- Manages only complete 4 KiB pages wholly contained in `LIMINE_MEMMAP_USABLE` regions.
+- Reserves the first MiB and all non-usable memory-map regions.
+- Rejects malformed, overflowing, or overlapping memory-map entries.
+- Stores a two-bit state per physical frame in metadata pages carved from usable RAM; those pages remain reserved.
+- Provides frame allocation, release, allocation counters, and rejection of unaligned, unmanaged, and double-freed addresses.
+- Runs a QEMU boot self-test covering unique aligned allocations, invalid frees, metadata protection, release, and reuse.
+
+The allocator is deliberately single-CPU at this stage. It must gain interrupt-safe/SMP synchronization before being called concurrently or from interrupt context. It returns physical addresses; it does not yet create or modify page-table mappings.
