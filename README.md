@@ -102,7 +102,8 @@ The BSP and each AP install private x86-64 GDT/TSS state, kernel-entry stacks,
 double-fault IST stacks, NMI IST stacks, and GS-based CPU-local records. The
 shared IDT handles architectural exceptions, the breakpoint self-test, NMI
 IPI acknowledgements, and the APIC spurious vector. The TSS I/O-permission
-bitmap denies port I/O by default.
+bitmap denies port I/O by default. Each AP must also prove that its active CR3
+root matches the BSP's shared address-space root before it is counted online.
 
 The local APIC is initialized in the mode reported by Limine. xAPIC uses a
 dedicated kernel mapping with PWT+PCD leaf attributes; x2APIC uses MSRs. The
@@ -111,7 +112,8 @@ sources, and enables the APIC software interface. NMI IPIs are sent with a
 bounded acknowledgement protocol and handled on per-CPU IST stacks. The BSP
 self-test and QEMU boot test exercise BSP and AP NMI delivery. A post-startup
 VMM self-test also verifies remote TLB invalidation for mapping, protection,
-and unmapping.
+and unmapping. Empty page-table structures are detached and all CPUs reload
+CR3 before their frames are reclaimed.
 
 The kernel spinlock primitive uses acquire/release atomics and IRQ-save
 critical sections. PMM allocation, release, claims, and accounting are
