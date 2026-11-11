@@ -34,6 +34,9 @@ build/interrupts_asm.o: kernel/interrupts.S
 build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/serial.o build/interrupts.o build/interrupts_asm.o kernel/linker.ld
 	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
 
+test-host:
+	@sh tools/test-pmm-host.sh
+
 iso: all
 	@bash tools/build-iso.sh
 
