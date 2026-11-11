@@ -2,11 +2,19 @@
 
 NYR is a from-scratch x86-64 operating system project.
 
-## Codespaces development
+## Reproducible development environment
 
-The Ubuntu 24.04 Codespaces image includes GCC/binutils, Clang/LLD, NASM, CMake/Ninja, QEMU, OVMF, GDB, FAT/ISO utilities, Rust, Python and common build utilities. It records installed package versions in `/etc/nyr-toolchain-packages.txt`. Open the repository, select `codespaces-development`, then choose **Code → Codespaces → Create codespace**. Use the browser-based VS Code terminal on iPhone.
+The build inputs are recorded in `toolchain.lock`:
 
-The current development image records the resolved Ubuntu package versions but is not yet a bit-for-bit reproducible toolchain. A separately pinned toolchain baseline is a follow-up engineering task; apt upgrades are not treated as version locking.
+- Ubuntu 24.04 package archive snapshot: `20261111T070000Z`.
+- Codespaces base image pinned by OCI digest.
+- Limine v12.9.6 binary release pinned by SHA-256.
+- Limine protocol header pinned to an exact upstream commit.
+- GitHub Actions pinned to immutable commit SHAs.
+
+Both Codespaces and CI use the same base image and Ubuntu package snapshot. Package versions are also recorded in `/etc/nyr-toolchain-packages.txt` in the development container and in CI logs. Updating the snapshot is an intentional toolchain change and must be followed by the complete build and boot validation.
+
+Open the repository, select `codespaces-development`, then choose **Code → Codespaces → Create codespace**. Use the browser-based VS Code terminal on iPhone.
 
 ## Build
 
@@ -16,7 +24,7 @@ make clean all
 make iso
 ```
 
-Outputs: `build/nyr-kernel.elf` and `build/nyr-uefi.iso`. The ISO build uses Limine v12.9.6 and verifies the published SHA-256 digest of its binary release archive. It builds the Limine host-side installer from the source shipped in that archive.
+Outputs: `build/nyr-kernel.elf` and `build/nyr-uefi.iso`. The ISO builder verifies the Limine binary release digest, builds the host installer shipped as source in that archive, and creates the documented hybrid ISO layout.
 
 ## Boot
 
@@ -25,22 +33,22 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel-entry and framebuffer-initialized messages on COM1. Interactive mode attaches the serial console to the Codespaces terminal.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel-entry and framebuffer-initialized messages on COM1.
 
 ## Current boot architecture
 
-- Limine UEFI bootloader and the upstream Limine boot protocol header, pinned to protocol commit `6e85ddd6f928b5b512015c4d47d1cfce2fd28079`.
-- Limine base-revision 6 and framebuffer requests in the protocol-defined request sections.
+- Limine UEFI bootloader and upstream protocol header, pinned in `toolchain.lock`.
+- Limine base revision 6 and protocol-defined request marker sections.
 - Higher-half x86-64 kernel at `0xffffffff80000000`.
 - Separate ELF load segments for requests, executable text, read-only data, and writable data.
 - Dedicated kernel stack and COM1 diagnostics.
 - 32-bpp RGB framebuffer initialization.
 
-This is a boot milestone, not yet a complete general-purpose OS. Physical/virtual memory management, interrupt handling, scheduling, storage, drivers and userspace remain future work.
+This is a verified boot milestone, not yet a complete general-purpose OS. Physical/virtual memory management, interrupt handling, scheduling, storage, drivers and userspace remain future work.
 
-## CI
+## CI validation
 
-GitHub Actions builds the ELF and UEFI ISO, boots it headlessly under QEMU/OVMF, and verifies serial markers. Artifacts and logs are retained for 14 days. A successful compile or ISO build alone does not count as a successful guest boot.
+GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO structure, boots the image under QEMU/OVMF, and verifies serial markers. The successful boot run is recorded in the pull request.
 
 ## Next milestones
 

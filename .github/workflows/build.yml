@@ -12,19 +12,26 @@ concurrency:
 jobs:
   build-and-qemu:
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724
+      options: --user root
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
-      - name: Install UEFI firmware and ISO utilities
+      - name: Configure immutable Ubuntu package snapshot
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
+          . ./toolchain.lock
+          printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+      - name: Install pinned build and emulator dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
       - name: Record tool versions
         run: |
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-          dpkg-query -W -f='${binary:Package}=${Version}\n' ovmf qemu-system-x86 xorriso
+          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso
       - run: make preflight
       - name: Build kernel and UEFI ISO
         run: make clean all iso

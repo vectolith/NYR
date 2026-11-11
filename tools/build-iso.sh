@@ -2,23 +2,24 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${LIMINE_VERSION:-12.9.6}"
-ARCHIVE="limine-binary.tar.gz"
+# shellcheck disable=SC1091
+source "$ROOT/toolchain.lock"
+
 WORK="$ROOT/build/limine"
 UNPACKED="$WORK/unpacked"
 LIMINE_DIR="$UNPACKED/limine-binary"
 ISO_ROOT="$ROOT/build/iso-root"
-ARCHIVE_SHA256="b38aabb042b0c0f9f562b7741be3c1204838d7bbacfa78bb411c674bd5b984ee"
+ARCHIVE="limine-binary.tar.gz"
 
 mkdir -p "$WORK"
 if [[ ! -f "$WORK/$ARCHIVE" ]]; then
     curl --fail --location --retry 3 --retry-delay 2 \
-        "https://github.com/Limine-Bootloader/Limine/releases/download/v${VERSION}/$ARCHIVE" \
+        "https://github.com/Limine-Bootloader/Limine/releases/download/v${LIMINE_VERSION}/$ARCHIVE" \
         --output "$WORK/$ARCHIVE"
 fi
 
-echo "$ARCHIVE_SHA256  $WORK/$ARCHIVE" | sha256sum --check --status || {
-    echo "Limine v${VERSION} binary archive SHA-256 mismatch" >&2
+echo "$LIMINE_BINARY_SHA256  $WORK/$ARCHIVE" | sha256sum --check --status || {
+    echo "Limine v${LIMINE_VERSION} binary archive SHA-256 mismatch" >&2
     exit 1
 }
 
@@ -28,7 +29,7 @@ tar --extract --gzip --file "$WORK/$ARCHIVE" --directory "$UNPACKED"
 
 for component in limine.c limine-bios.sys limine-bios-cd.bin limine-uefi-cd.bin BOOTX64.EFI Makefile; do
     if [[ ! -f "$LIMINE_DIR/$component" ]]; then
-        echo "Expected Limine v${VERSION} component missing: $LIMINE_DIR/$component" >&2
+        echo "Expected Limine v${LIMINE_VERSION} component missing: $LIMINE_DIR/$component" >&2
         echo "Archive entries:" >&2
         tar --list --gzip --file "$WORK/$ARCHIVE" | sed -n '1,100p' >&2
         exit 1

@@ -1,0 +1,8 @@
+# Reproducible dependency inputs for NYR development and CI.
+# Update the Ubuntu snapshot only after rebuilding and validating the full toolchain.
+UBUNTU_RELEASE=noble
+UBUNTU_SNAPSHOT=20261111T070000Z
+DEVCONTAINER_IMAGE=mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724
+LIMINE_VERSION=12.9.6
+LIMINE_BINARY_SHA256=b38aabb042b0c0f9f562b7741be3c1204838d7bbacfa78bb411c674bd5b984ee
+LIMINE_PROTOCOL_COMMIT=6e85ddd6f928b5b512015c4d47d1cfce2fd28079
