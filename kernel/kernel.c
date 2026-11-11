@@ -163,15 +163,9 @@ void nyr_kernel_main(void) {
         halt_forever();
     }
 
-    static struct nyr_pmm_stats stats;
-    if (!nyr_pmm_get_stats(&stats)) {
-        serial_write("NYR: physical memory manager statistics unavailable\r\n");
-        halt_forever();
-    }
-
-    serial_line("NYR: PMM managed frames ", stats.managed_frames);
-    serial_line("NYR: PMM free frames ", stats.free_frames);
-    serial_line("NYR: PMM allocated frames ", stats.allocated_frames);
+    serial_line("NYR: PMM managed frames ", nyr_pmm_managed_frames());
+    serial_line("NYR: PMM free frames ", nyr_pmm_free_frames());
+    serial_line("NYR: PMM allocated frames ", nyr_pmm_allocated_frames());
 
     if (!nyr_pmm_self_test()) {
         serial_write("NYR: PMM self-test failed\r\n");

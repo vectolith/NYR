@@ -335,17 +335,16 @@ bool nyr_pmm_free_frame(uint64_t physical_address) {
     return true;
 }
 
-bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats) {
-    if (!allocator_ready || stats == NULL) {
-        return false;
-    }
+uint64_t nyr_pmm_managed_frames(void) {
+    return allocator_ready ? managed_frames : 0;
+}
 
-    pmm_serial_write("NYR: PMM stats entered\r\n");
-    stats->managed_frames = managed_frames;
-    stats->free_frames = free_frames;
-    stats->allocated_frames = allocated_frames;
-    pmm_serial_write("NYR: PMM stats completed\r\n");
-    return true;
+uint64_t nyr_pmm_free_frames(void) {
+    return allocator_ready ? free_frames : 0;
+}
+
+uint64_t nyr_pmm_allocated_frames(void) {
+    return allocator_ready ? allocated_frames : 0;
 }
 
 bool nyr_pmm_self_test(void) {

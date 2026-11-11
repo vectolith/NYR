@@ -6,12 +6,6 @@
 
 struct limine_memmap_response;
 
-struct nyr_pmm_stats {
-    uint64_t managed_frames;
-    uint64_t free_frames;
-    uint64_t allocated_frames;
-};
-
 /*
  * Initialise the physical frame allocator from the Limine memory map.
  * Only complete pages wholly contained in LIMINE_MEMMAP_USABLE regions are
@@ -27,7 +21,9 @@ uint64_t nyr_pmm_alloc_frame(void);
 /* Release a frame previously returned by nyr_pmm_alloc_frame. */
 bool nyr_pmm_free_frame(uint64_t physical_address);
 
-bool nyr_pmm_get_stats(struct nyr_pmm_stats *stats);
+uint64_t nyr_pmm_managed_frames(void);
+uint64_t nyr_pmm_free_frames(void);
+uint64_t nyr_pmm_allocated_frames(void);
 
 /* A deterministic allocator self-test intended for early boot diagnostics. */
 bool nyr_pmm_self_test(void);
