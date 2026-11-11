@@ -22,11 +22,11 @@ for marker in \
   "NYR: framebuffer initialized" \
   "NYR: GDT and IDT initialized; breakpoint self-test passed" \
   "NYR: PMM self-test passed" \
-  "NYR: virtual memory translation self-test passed" \
+  "NYR: virtual memory mapping, ownership, and TLB self-tests passed" \
   "NYR: boot milestone reached; idle halt loop"; do
   grep -Fq "$marker" "$LOG" || {
     echo "Missing boot marker: $marker (QEMU status $STATUS)" >&2
     exit 1
   }
 done
-echo "UEFI boot and PMM smoke test passed"
+echo "UEFI boot, PMM, and VMM mapping smoke tests passed"

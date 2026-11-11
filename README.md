@@ -44,7 +44,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Separate ELF load segments for requests, executable text, read-only data, and writable data.
 - Dedicated kernel stack and COM1 diagnostics.
 - 32-bpp RGB framebuffer initialization.
-- Explicit four-level x86-64 paging request and a read-only page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings.
+- Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
 This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM now supports single-page 4 KiB mapping and unmapping in the active address space, with owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings are deliberately not split. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
