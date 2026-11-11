@@ -7,7 +7,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: nyr-ci-${{ github.ref }}
+  # Push and pull_request events for the same commit must not run duplicate
+  # package-install/build pipelines against the same immutable snapshot.
+  group: nyr-ci-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 jobs:
   build-and-qemu:

@@ -20,9 +20,12 @@ package_index_complete() {
 attempt=1
 # Snapshot-service 5xx responses can persist for several minutes. Keep the
 # immutable snapshot and retry with bounded backoff within the CI job timeout.
+# Clear stale indexes once, then preserve successfully downloaded indexes so
+# later attempts fetch only missing or failed indexes instead of refetching
+# the entire snapshot on every retry.
 max_attempts=8
+rm -rf /var/lib/apt/lists/*
 while [ "$attempt" -le "$max_attempts" ]; do
-    rm -rf /var/lib/apt/lists/*
     if apt-get -o Acquire::Retries=2 \
                -o Acquire::http::Timeout=30 \
                -o Acquire::https::Timeout=30 update &&
