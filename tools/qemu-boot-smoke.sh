@@ -20,6 +20,7 @@ cat "$LOG" || true
 for marker in \
   "NYR: kernel entered" \
   "NYR: framebuffer initialized" \
+  "NYR: GDT and IDT initialized; breakpoint self-test passed" \
   "NYR: PMM self-test passed" \
   "NYR: boot milestone reached; idle halt loop"; do
   grep -Fq "$marker" "$LOG" || {

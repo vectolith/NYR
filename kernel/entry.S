@@ -1,5 +1,6 @@
 .section .text.entry,"ax",@progbits
 .global _start
+.global stack_top
 .type _start, @function
 .extern nyr_kernel_main
 

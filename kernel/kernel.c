@@ -66,6 +66,13 @@ void nyr_kernel_main(void) {
     nyr_serial_init();
     nyr_serial_write("NYR: kernel entered\r\n");
 
+    nyr_interrupts_init();
+    if (!nyr_interrupts_self_test()) {
+        nyr_serial_write("NYR: interrupt self-test failed\\r\\n");
+        halt_forever();
+    }
+    nyr_serial_write("NYR: GDT and IDT initialized; breakpoint self-test passed\\r\\n");
+
     if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision)) {
         nyr_serial_write("NYR: unsupported Limine base revision\r\n");
         halt_forever();
