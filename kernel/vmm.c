@@ -591,7 +591,8 @@ bool nyr_vmm_self_test(uint64_t hhdm_offset) {
         removed && unmapped.physical_address == owned_frame &&
         unmapped.ownership == NYR_VMM_PAGE_OWNED;
     const bool freed = ownership_returned && nyr_pmm_free_frame(owned_frame);
-    if (!readback || !translated_mapping || !protection_verified ||\n        !permissions_restored || !removed || !absent || !freed) {
+    if (!readback || !translated_mapping || !protection_verified ||
+        !permissions_restored || !removed || !absent || !freed) {
         return false;
     }
 

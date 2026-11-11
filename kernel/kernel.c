@@ -5,6 +5,7 @@
 #include "include/serial.h"
 #include "include/interrupts.h"
 #include "include/vmm.h"
+#include "include/smp.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -44,6 +45,14 @@ static volatile struct limine_memmap_request memory_map_request = {
     .id = LIMINE_MEMMAP_REQUEST_ID,
     .revision = 0,
     .response = 0
+};
+
+LIMINE_REQUEST
+static volatile struct limine_mp_request mp_request = {
+    .id = LIMINE_MP_REQUEST_ID,
+    .revision = 0,
+    .response = 0,
+    .flags = 0
 };
 
 LIMINE_MARKER __attribute__((section(".limine_requests_end")))
@@ -87,6 +96,24 @@ void nyr_kernel_main(void) {
     if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision)) {
         nyr_serial_write("NYR: unsupported Limine base revision\r\n");
         halt_forever();
+    }
+
+    struct limine_mp_response *mp_response = mp_request.response;
+    if (mp_response == 0) {
+        nyr_serial_write("NYR: Limine MP response unavailable; BSP-only mode\r\n");
+    } else {
+        struct nyr_smp_topology topology;
+        if (!nyr_smp_discover(mp_response, &topology)) {
+            nyr_serial_write("NYR: invalid Limine SMP CPU inventory\r\n");
+            halt_forever();
+        }
+        serial_line("NYR: SMP topology discovered CPUs ", topology.cpu_count);
+        serial_line("NYR: BSP processor ID ", topology.bsp_processor_id);
+        serial_line("NYR: BSP LAPIC ID ", topology.bsp_lapic_id);
+        nyr_serial_write(topology.x2apic
+            ? "NYR: SMP topology reports x2APIC mode\r\n"
+            : "NYR: SMP topology reports xAPIC mode\r\n");
+        nyr_serial_write("NYR: AP startup deferred until per-CPU state and interrupt routing are ready\r\n");
     }
 
     struct limine_framebuffer_response *fb_response = framebuffer_request.response;

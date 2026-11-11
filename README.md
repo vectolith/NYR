@@ -23,7 +23,7 @@ Open the repository, select `codespaces-development`, then choose **Code → Cod
 - CI sets four build jobs and boots QEMU with four virtual CPUs.
 - QEMU uses multi-threaded TCG (`-accel tcg,thread=multi`) so guest vCPUs can execute on separate host threads when host capacity permits.
 - Set `NYR_CPUS` to change the QEMU virtual CPU count; it defaults to `4`.
-- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The current kernel still initializes and runs only on the bootstrap processor. Application processors remain unused until ACPI discovery, AP startup, APIC/IPI routing, per-CPU state, locking, and remote TLB shootdowns are implemented and tested.
+- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The kernel now validates the CPU inventory supplied by Limine's x86-64 MP protocol, including unique processor/LAPIC IDs and BSP identification. It does not yet start application processors. AP startup remains gated on per-CPU stacks and TSS state, local APIC/IPI routing, SMP-safe PMM/page-table synchronization, and remote TLB shootdowns.
 
 ## Build
 
@@ -43,7 +43,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership/TLB self-tests, and the final boot milestone on COM1. CI also runs host-side PMM and VMM tests.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership/TLB self-tests, and the final boot milestone on COM1. CI also runs host-side PMM, VMM, and SMP CPU-inventory validation tests.
 
 ## Current boot architecture
 
@@ -56,7 +56,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel still has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. CPU topology discovery is implemented; AP execution is not. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -66,7 +66,7 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 1. Virtual memory mapping/unmapping with explicit page ownership, permission enforcement, and TLB invalidation.
 2. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
-3. Kernel heap and synchronization primitives, including SMP-safe PMM locking.
+3. Per-CPU stacks/TSS and AP startup through the Limine MP protocol; then local APIC/IPI routing and SMP-safe PMM/page-table locks.
 4. Scheduler, processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.
 
