@@ -1,54 +1,46 @@
-name: NYR kernel build and emulator checks
-
+name: NYR kernel build and UEFI boot checks
 on:
   push:
-    branches:
-      - main
-      - codespaces-development
-      - import/nyr-bundle
+    branches: [main, codespaces-development, import/nyr-bundle]
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: nyr-ci-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build-and-qemu:
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Install current distro toolchain and QEMU
+      - uses: actions/checkout@v4
+      - name: Install toolchain, UEFI firmware and ISO utilities
         run: |
           sudo apt-get update
           sudo apt-get upgrade -y
-          sudo apt-get install -y build-essential qemu-system-x86 ovmf binutils
+          sudo apt-get install -y build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
       - name: Record tool versions
         run: |
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-      - name: Preflight
-        run: make preflight
-      - name: Build kernel
-        run: make clean all
-      - name: Verify kernel ELF
+      - run: make preflight
+      - name: Build kernel and UEFI ISO
+        run: make clean all iso
+      - name: Verify artifacts
         run: |
-          file build/nyr-kernel.elf
+          file build/nyr-kernel.elf build/nyr-uefi.iso
           readelf -h build/nyr-kernel.elf
-      - name: QEMU headless startup and serial plumbing
-        run: make qemu-smoke
-      - name: Upload kernel and QEMU serial log
+      - name: Boot UEFI ISO and verify serial output
+        run: make qemu-boot-smoke
+      - name: Upload kernel, ISO and boot log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nyr-kernel-and-qemu-logs
+          name: nyr-uefi-build-and-boot-logs
           path: |
             build/nyr-kernel.elf
-            build/qemu-smoke-serial.log
+            build/nyr-uefi.iso
+            build/qemu-boot-serial.log
           if-no-files-found: warn
           retention-days: 14
