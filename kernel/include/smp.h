@@ -9,6 +9,9 @@ struct nyr_smp_topology {
     uint32_t bsp_processor_id;
     bool x2apic;
 };
+uint32_t nyr_smp_architecture_index(uint64_t cpu_index,
+                                       uint64_t bsp_index,
+                                       uint64_t cpu_count);
 bool nyr_smp_discover(const struct limine_mp_response *response,
                       struct nyr_smp_topology *topology);
 bool nyr_smp_start_aps(struct limine_mp_response *response,

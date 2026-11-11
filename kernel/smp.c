@@ -11,6 +11,16 @@ struct nyr_smp_cpu_state {
     uint32_t online;
     uint32_t architecture_index;
 };
+uint32_t nyr_smp_architecture_index(uint64_t cpu_index,
+                                       uint64_t bsp_index,
+                                       uint64_t cpu_count) {
+    if (cpu_count == 0 || cpu_count > NYR_SMP_MAX_CPUS ||
+        cpu_index >= cpu_count || bsp_index >= cpu_count) return UINT32_MAX;
+    if (cpu_index == bsp_index) return 0u;
+    return cpu_index < bsp_index ? (uint32_t)(cpu_index + 1u)
+                                 : (uint32_t)cpu_index;
+}
+
 static struct nyr_smp_cpu_state cpu_state[NYR_SMP_MAX_CPUS];
 static uint64_t configured_cpu_count;
 static uint64_t online_cpus;
@@ -98,7 +108,8 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
         struct limine_mp_info *info = response->cpus[i];
         cpu_state[i].processor_id = info->processor_id;
         cpu_state[i].lapic_id = info->lapic_id;
-        cpu_state[i].architecture_index = i < bsp_index ? (uint32_t)(i + 1u) : (uint32_t)i;
+        cpu_state[i].architecture_index = nyr_smp_architecture_index(i, bsp_index, topology->cpu_count);
+        if (cpu_state[i].architecture_index == UINT32_MAX) return false;
         __atomic_store_n(&cpu_state[i].online, 0u, __ATOMIC_RELAXED);
     }
     __atomic_store_n(&configured_cpu_count, topology->cpu_count, __ATOMIC_RELEASE);

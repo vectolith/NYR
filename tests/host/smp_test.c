@@ -72,6 +72,33 @@ int main(void) {
     }
     response.flags = 0;
 
+    /* The BSP may occupy any slot in Limine's CPU array. Its local slot is 0;
+       every AP must receive one unique local slot in [1, cpu_count). */
+    for (uint64_t bsp = 0; bsp < 4; ++bsp) {
+        bool seen[4] = { false, false, false, false };
+        for (uint64_t cpu = 0; cpu < 4; ++cpu) {
+            const uint32_t local = nyr_smp_architecture_index(cpu, bsp, 4);
+            if (local >= 4 || seen[local] || (cpu == bsp && local != 0) ||
+                (cpu != bsp && local == 0)) {
+                fputs("host SMP test: CPU-local index mapping is not unique\n", stderr);
+                return 1;
+            }
+            seen[local] = true;
+        }
+        for (unsigned int local = 0; local < 4; ++local) {
+            if (!seen[local]) {
+                fputs("host SMP test: CPU-local index mapping has a gap\n", stderr);
+                return 1;
+            }
+        }
+    }
+    if (nyr_smp_architecture_index(0, 0, 0) != UINT32_MAX ||
+        nyr_smp_architecture_index(4, 0, 4) != UINT32_MAX ||
+        nyr_smp_architecture_index(0, 4, 4) != UINT32_MAX) {
+        fputs("host SMP test: invalid CPU-local index inputs accepted\n", stderr);
+        return 1;
+    }
+
     if (expect_rejected("null response", 0)) return 1;
     if (nyr_smp_discover(&response, 0)) {
         fputs("host SMP test: null output accepted\n", stderr);
