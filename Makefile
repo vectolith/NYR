@@ -36,7 +36,7 @@ build/interrupts_asm.o: kernel/interrupts.S
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
 build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/serial.o build/interrupts.o build/interrupts_asm.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
 
 test-host:
 	@sh tools/test-pmm-host.sh
