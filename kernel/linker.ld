@@ -1,9 +1,54 @@
+OUTPUT_FORMAT(elf64-x86-64)
 ENTRY(_start)
-SECTIONS {
-  . = 0xffffffff80000000;
-  .text : ALIGN(4096) { KEEP(*(.text.entry)) *(.text*) }
-  .limine_reqs : ALIGN(8) { KEEP(*(.limine_reqs)) }
-  .rodata : ALIGN(4096) { *(.rodata*) }
-  .data : ALIGN(4096) { *(.data*) }
-  .bss : ALIGN(4096) { *(COMMON) *(.bss*) }
+
+PHDRS
+{
+    limine_requests PT_LOAD FLAGS(0x06);
+    text            PT_LOAD FLAGS(0x05);
+    rodata          PT_LOAD FLAGS(0x04);
+    data            PT_LOAD FLAGS(0x06);
+}
+
+SECTIONS
+{
+    . = 0xffffffff80000000;
+
+    .limine_requests : ALIGN(8)
+    {
+        KEEP(*(.limine_requests_start))
+        KEEP(*(.limine_requests))
+        KEEP(*(.limine_requests_end))
+    } :limine_requests
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .text :
+    {
+        KEEP(*(.text.entry))
+        *(.text .text.*)
+    } :text
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .rodata :
+    {
+        *(.rodata .rodata.*)
+    } :rodata
+
+    . = ALIGN(CONSTANT(MAXPAGESIZE));
+    .data :
+    {
+        *(.data .data.*)
+    } :data
+
+    .bss :
+    {
+        *(.bss .bss.*)
+        *(COMMON)
+    } :data
+
+    /DISCARD/ :
+    {
+        *(.eh_frame .eh_frame.*)
+        *(.note .note.*)
+        *(.got .got.*)
+    }
 }
