@@ -73,6 +73,12 @@ static void serial_line(const char *label, uint64_t value) {
     nyr_serial_write("\r\n");
 }
 
+static uint64_t read_tsc_ordered(void) {
+    uint32_t low, high;
+    __asm__ volatile ("lfence; rdtsc" : "=a"(low), "=d"(high) : : "memory");
+    return ((uint64_t)high << 32) | low;
+}
+
 static void framebuffer_fill(struct limine_framebuffer *fb, uint32_t pixel) {
     volatile uint32_t *pixels = (volatile uint32_t *)fb->address;
     const uint64_t stride = fb->pitch / sizeof(uint32_t);
@@ -177,6 +183,30 @@ void nyr_kernel_main(void) {
         halt_forever();
     }
     nyr_serial_write("NYR: PMM self-test passed\r\n");
+    /* BSP allocator microbenchmark; TSC ticks are not converted to nanoseconds. */
+    enum { PMM_BENCH_FRAMES = 64 };
+    uint64_t benchmark_frames[PMM_BENCH_FRAMES];
+    uint64_t benchmark_start = read_tsc_ordered();
+    for (unsigned int i = 0; i < PMM_BENCH_FRAMES; ++i) {
+        benchmark_frames[i] = nyr_pmm_alloc_frame();
+        if (benchmark_frames[i] == 0) {
+            nyr_serial_write("NYR: PMM benchmark allocation failed\\r\\n");
+            halt_forever();
+        }
+    }
+    uint64_t benchmark_end = read_tsc_ordered();
+    serial_line("NYR: PMM alloc average TSC ticks ",
+                (benchmark_end - benchmark_start) / PMM_BENCH_FRAMES);
+    benchmark_start = read_tsc_ordered();
+    for (unsigned int i = 0; i < PMM_BENCH_FRAMES; ++i) {
+        if (!nyr_pmm_free_frame(benchmark_frames[i])) {
+            nyr_serial_write("NYR: PMM benchmark release failed\\r\\n");
+            halt_forever();
+        }
+    }
+    benchmark_end = read_tsc_ordered();
+    serial_line("NYR: PMM free average TSC ticks ",
+                (benchmark_end - benchmark_start) / PMM_BENCH_FRAMES);
 
     if (!nyr_vmm_enable_nx()) {
         nyr_serial_write("NYR: CPU NX support unavailable\r\n");
