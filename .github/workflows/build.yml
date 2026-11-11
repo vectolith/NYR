@@ -27,8 +27,7 @@ jobs:
           printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
       - name: Install pinned build and emulator dependencies
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file
+          tools/apt-install-snapshot.sh build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file
       - name: Record tool versions
         run: |
           cc --version | head -n 1
