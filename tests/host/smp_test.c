@@ -5,6 +5,16 @@
 
 #include "../../kernel/include/limine.h"
 #include "../../kernel/include/smp.h"
+#include "../../kernel/include/vmm.h"
+
+/*
+ * The host test exercises topology validation only. AP startup is not invoked,
+ * so provide a host-safe success stub for the AP callback's kernel-only NX
+ * setup dependency instead of linking privileged CR/MSR instructions.
+ */
+bool nyr_vmm_enable_nx(void) {
+    return true;
+}
 
 static int expect_rejected(const char *name,
                            const struct limine_mp_response *response) {
