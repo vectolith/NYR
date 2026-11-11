@@ -2,7 +2,9 @@ NYR_TOOLS_MOUNT ?= /mnt/tools
 RUN_WITH_TOOLS = NYR_TOOLS_MOUNT=$(NYR_TOOLS_MOUNT) ./tools/with-tools.sh
 CC ?= cc
 LD ?= ld
-CFLAGS = -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -mgeneral-regs-only -mcmodel=kernel -Wall -Wextra -Werror -O2
+# Compiler-generated dependency files keep incremental builds correct when a
+# kernel header changes, without requiring a clean rebuild.
+CFLAGS = -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -mgeneral-regs-only -mcmodel=kernel -Wall -Wextra -Werror -O2 -MMD -MP
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 -z noexecstack --build-id=none -T kernel/linker.ld
 
 all: build/nyr-kernel.elf
@@ -49,6 +51,9 @@ build/interrupts_asm.o: kernel/interrupts.S
 
 build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o kernel/linker.ld
 	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o -o $@
+
+# GCC/Clang emit these alongside objects; missing files are normal on clean builds.
+-include $(wildcard build/*.d)
 
 test-host: test-pmm-host test-vmm-host test-smp-host test-lock-host
 
