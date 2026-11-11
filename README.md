@@ -44,8 +44,10 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Separate ELF load segments for requests, executable text, read-only data, and writable data.
 - Dedicated kernel stack and COM1 diagnostics.
 - 32-bpp RGB framebuffer initialization.
+- Explicit four-level x86-64 paging request and a read-only page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings.
+- Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The current VMM milestone is read-only page-table inspection and address translation; page-table mutation, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The current VMM milestone is read-only page-table inspection and address translation. Page-table mutation, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -53,13 +55,24 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 ## Next milestones
 
-1. Host-side unit and malformed-input tests for early memory-management code.
-2. Virtual memory manager: page-table ownership, mapping/unmapping, permissions, and TLB invalidation.
-3. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
-4. Heap allocator and kernel memory APIs.
-5. Scheduler, processes, ring 3 and syscall ABI.
-6. VFS, init process, drivers, storage and userspace.
+1. Virtual memory mapping/unmapping with explicit page ownership, permission enforcement, and TLB invalidation.
+2. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
+3. Kernel heap and synchronization primitives, including SMP-safe PMM locking.
+4. Scheduler, processes, ring 3 and syscall ABI.
+5. VFS, init process, drivers, storage and userspace.
 
+
+## Virtual memory inspection
+
+The current VMM is deliberately read-only. It requests four-level paging from Limine and walks the active CR3 hierarchy through the HHDM.
+
+- Translates 4 KiB PTE mappings and 2 MiB/1 GiB huge-page mappings.
+- Calculates effective writable, user-accessible, and executable permissions by combining flags across all paging levels.
+- Rejects non-canonical virtual addresses, absent entries, unaligned roots, and reserved address bits in huge-page entries.
+- Boot self-test validates the kernel text mapping, the active stack mapping, and a PMM-allocated frame through the HHDM.
+- Host tests use synthetic page tables to verify translations, huge pages, effective permissions, and malformed mappings.
+
+It does not allocate page tables, create or remove mappings, change permissions, or perform TLB invalidation yet.
 
 ## Physical memory manager
 
