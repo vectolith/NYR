@@ -33,6 +33,8 @@ jobs:
           qemu-system-x86_64 --version | head -n 1
           dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
       - run: make preflight
+      - name: Run host-side physical memory allocator tests
+        run: make test-host
       - name: Build kernel and UEFI ISO
         run: make clean all iso
       - name: Verify ELF and ISO artifacts

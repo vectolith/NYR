@@ -20,6 +20,7 @@ Open the repository, select `codespaces-development`, then choose **Code → Cod
 
 ```sh
 make preflight
+make test-host
 make clean all
 make iso
 ```
@@ -33,7 +34,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel-entry and framebuffer-initialized messages on COM1.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, and the final boot milestone on COM1. CI also runs host-side PMM tests against valid, overlapping, and overflowing memory maps.
 
 ## Current boot architecture
 
@@ -44,7 +45,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel-entry and 
 - Dedicated kernel stack and COM1 diagnostics.
 - 32-bpp RGB framebuffer initialization.
 
-This is a verified boot milestone, not yet a complete general-purpose OS. Physical/virtual memory management, interrupt handling, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. Virtual memory management, interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -52,11 +53,12 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 ## Next milestones
 
-1. Firmware memory map and physical memory manager.
-2. GDT/IDT, exceptions, APIC and timers.
-3. Virtual memory manager and heap.
-4. Scheduler, processes, ring 3 and syscall ABI.
-5. VFS, init process, drivers, storage and userspace.
+1. Host-side unit and malformed-input tests for early memory-management code.
+2. Virtual memory manager: page-table ownership, mapping/unmapping, permissions, and TLB invalidation.
+3. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
+4. Heap allocator and kernel memory APIs.
+5. Scheduler, processes, ring 3 and syscall ABI.
+6. VFS, init process, drivers, storage and userspace.
 
 
 ## Physical memory manager
