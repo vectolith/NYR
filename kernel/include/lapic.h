@@ -16,6 +16,10 @@ bool nyr_lapic_send_tlb_invalidate(uint32_t destination_lapic_id,
                                    uint32_t destination_cpu_index,
                                    uint64_t virtual_address,
                                    uint64_t spin_limit);
+/* Request a full local TLB/page-walk-cache flush on a target CPU. */
+bool nyr_lapic_send_tlb_flush_all(uint32_t destination_lapic_id,
+                                  uint32_t destination_cpu_index,
+                                  uint64_t spin_limit);
 /* Called by the NMI exception dispatcher; false means an unexpected NMI. */
 bool nyr_lapic_handle_nmi(void);
 #endif

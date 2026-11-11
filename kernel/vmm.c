@@ -538,15 +538,20 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
         return false;
     }
 
-    /* Reclaim only empty tables created and tagged by this VMM. */
+    /* Detach empty VMM-owned tables, then flush every CPU before freeing them. */
+    uint64_t reclaimed_frames[3];
+    unsigned int reclaimed_count = 0;
     for (int level = 2; level >= 0; --level) {
         const uint64_t parent = *parent_entries[level];
         if ((parent & X86_PTE_OWNED_TABLE) == 0 ||
-            !table_is_empty(child_tables[level])) {
-            break;
-        }
+            !table_is_empty(child_tables[level])) break;
         *parent_entries[level] = 0;
-        (void)nyr_pmm_free_frame(child_physical[level]);
+        reclaimed_frames[reclaimed_count++] = child_physical[level];
+    }
+    if (reclaimed_count != 0) {
+        if (!nyr_smp_tlb_flush_all()) remote_tlb_fail_stop();
+        for (unsigned int i = 0; i < reclaimed_count; ++i)
+            (void)nyr_pmm_free_frame(reclaimed_frames[i]);
     }
 
     nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);

@@ -31,6 +31,14 @@ bool nyr_lapic_send_tlb_invalidate(uint32_t lapic_id, uint32_t cpu_index,
     (void)lapic_id; (void)cpu_index; (void)virtual_address; (void)spin_limit;
     return true;
 }
+bool nyr_lapic_send_tlb_flush_all(uint32_t lapic_id, uint32_t cpu_index,
+                                  uint64_t spin_limit) {
+    (void)lapic_id; (void)cpu_index; (void)spin_limit; return true;
+}
+bool nyr_lapic_send_tlb_flush_all(uint32_t lapic_id, uint32_t cpu_index,
+                                  uint64_t spin_limit) {
+    (void)lapic_id; (void)cpu_index; (void)spin_limit; return true;
+}
 
 static int expect_rejected(const char *name,
                            const struct limine_mp_response *response) {

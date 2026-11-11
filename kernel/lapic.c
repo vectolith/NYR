@@ -50,6 +50,7 @@
 static bool lapic_prepared;
 static bool lapic_x2apic;
 static uint64_t lapic_physical_base;
+static uint64_t lapic_root_physical;
 static uint64_t lapic_hhdm_offset;
 static volatile uint32_t *lapic_mmio;
 static uint32_t nmi_pending[NYR_LAPIC_MAX_CPUS];
@@ -119,6 +120,8 @@ bool nyr_lapic_prepare(uint64_t hhdm_offset, bool x2apic) {
         (x2apic && !has_x2apic)) return false;
     lapic_x2apic = x2apic;
     lapic_hhdm_offset = hhdm_offset;
+    lapic_root_physical = nyr_vmm_current_root_physical();
+    if (lapic_root_physical == 0) return false;
     uint64_t base = read_msr(IA32_APIC_BASE);
     lapic_physical_base = base & APIC_BASE_ADDRESS;
     if (lapic_physical_base == 0 ||
@@ -139,7 +142,8 @@ bool nyr_lapic_prepare(uint64_t hhdm_offset, bool x2apic) {
 }
 
 bool nyr_lapic_init_cpu(uint32_t expected_lapic_id) {
-    if (!lapic_prepared || !set_apic_base_for_cpu()) return false;
+    if (!lapic_prepared || !set_apic_base_for_cpu() ||
+        nyr_vmm_current_root_physical() != lapic_root_physical) return false;
     if (!lapic_x2apic) {
         struct nyr_vmm_translation mapping;
         if (!nyr_vmm_translate_current(lapic_hhdm_offset,

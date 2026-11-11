@@ -18,6 +18,8 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
                        const struct nyr_smp_topology *topology,
                        uint64_t spin_limit);
 bool nyr_smp_tlb_shootdown(uint64_t virtual_address);
+/* Flush local and every online AP's non-global TLB/page-walk cache. */
+bool nyr_smp_tlb_flush_all(void);
 uint64_t nyr_smp_online_count(void);
 uint64_t nyr_smp_failed_count(void);
 #endif

@@ -22,6 +22,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
                                  uint64_t virtual_address,
                                  struct nyr_vmm_translation *translation);
 
+/* Return the active CR3 root physical address, excluding PCID/control bits. */
+uint64_t nyr_vmm_current_root_physical(void);
+
 /* Translate through the currently active CR3 page-table root. */
 bool nyr_vmm_translate_current(uint64_t hhdm_offset,
                                uint64_t virtual_address,

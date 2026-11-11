@@ -165,6 +165,31 @@ bool nyr_smp_tlb_shootdown(uint64_t virtual_address) {
     return true;
 }
 
+bool nyr_smp_tlb_flush_all(void) {
+    const uint64_t count = __atomic_load_n(&configured_cpu_count, __ATOMIC_ACQUIRE);
+    if (count > NYR_SMP_MAX_CPUS ||
+        (count != 0 &&
+         (__atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE) != count ||
+          __atomic_load_n(&failed_cpus, __ATOMIC_ACQUIRE) != 0))) return false;
+
+    for (uint64_t i = 0; i < count; ++i) {
+        const struct nyr_smp_cpu_state *state = &cpu_state[i];
+        if (state->architecture_index == 0u) continue;
+        if (__atomic_load_n(&state->online, __ATOMIC_ACQUIRE) != 1u ||
+            !nyr_lapic_send_tlb_flush_all(state->lapic_id,
+                                          state->architecture_index,
+                                          UINT64_C(50000000))) {
+            __atomic_add_fetch(&failed_cpus, 1u, __ATOMIC_RELEASE);
+            return false;
+        }
+    }
+
+    uint64_t cr3;
+    __asm__ volatile ("mov %%cr3, %0; mov %0, %%cr3"
+                      : "=&r"(cr3) : : "memory");
+    return true;
+}
+
 uint64_t nyr_smp_online_count(void) {
     return __atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE);
 }
