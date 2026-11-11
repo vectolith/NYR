@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "include/interrupts.h"
 #include "include/serial.h"
+#include "include/lapic.h"
 
 #define NYR_EXCEPTION_COUNT 32u
 #define NYR_MAX_CPUS 256u
@@ -59,11 +60,13 @@ static struct nyr_tss tss[NYR_MAX_CPUS] __attribute__((aligned(16)));
 static struct nyr_cpu_local cpu_local[NYR_MAX_CPUS] __attribute__((aligned(64)));
 static uint8_t kernel_stacks[NYR_MAX_CPUS][NYR_KERNEL_STACK_SIZE] __attribute__((aligned(16)));
 static uint8_t double_fault_stacks[NYR_MAX_CPUS][NYR_DOUBLE_FAULT_STACK_SIZE] __attribute__((aligned(16)));
+static uint8_t nmi_stacks[NYR_MAX_CPUS][NYR_DOUBLE_FAULT_STACK_SIZE] __attribute__((aligned(16)));
 static volatile uint64_t breakpoint_count;
 static bool idt_ready;
 
 extern char stack_top[];
 extern void (*nyr_exception_stub_table[NYR_EXCEPTION_COUNT])(void);
+extern void nyr_isr255(void);
 extern void nyr_load_gdt(const struct nyr_gdt_pointer *pointer);
 extern void nyr_load_task_register(void);
 extern void nyr_load_idt(const struct nyr_idt_pointer *pointer);
@@ -100,8 +103,9 @@ void nyr_interrupts_init(void) {
     }
     for (unsigned int vector = 0; vector < NYR_EXCEPTION_COUNT; ++vector) {
         set_idt_gate(vector, nyr_exception_stub_table[vector],
-                     vector == 8u ? 1u : 0u);
+                     vector == 8u ? 1u : (vector == 2u ? 2u : 0u));
     }
+    set_idt_gate(255u, nyr_isr255, 0u);
     idt_ready = true;
 }
 
@@ -122,6 +126,8 @@ bool nyr_interrupts_init_cpu(uint32_t cpu_index, uint32_t lapic_id, bool bootstr
         : (uint64_t)(uintptr_t)&kernel_stacks[cpu_index][NYR_KERNEL_STACK_SIZE];
     cpu_tss->ist1 = (uint64_t)(uintptr_t)
         &double_fault_stacks[cpu_index][NYR_DOUBLE_FAULT_STACK_SIZE];
+    cpu_tss->ist2 = (uint64_t)(uintptr_t)
+        &nmi_stacks[cpu_index][NYR_DOUBLE_FAULT_STACK_SIZE];
     cpu_tss->iomap_base = (uint16_t)offsetof(struct nyr_tss, iomap);
     for (size_t i = 0; i < sizeof(cpu_tss->iomap); ++i) cpu_tss->iomap[i] = 0xffu;
     set_tss_descriptor(cpu_gdt, (uint64_t)(uintptr_t)cpu_tss,
@@ -170,6 +176,8 @@ static void exception_halt(void) {
     for (;;) __asm__ volatile ("cli; hlt");
 }
 void nyr_exception_dispatch(struct nyr_exception_frame *frame) {
+    if (frame->vector == 255u) return;
+    if (frame->vector == 2u && nyr_lapic_handle_nmi()) return;
     if (frame->vector == 3u) {
         __atomic_add_fetch(&breakpoint_count, 1u, __ATOMIC_RELAXED);
         return;

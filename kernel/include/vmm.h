@@ -32,7 +32,8 @@ bool nyr_vmm_self_test(uint64_t hhdm_offset);
 enum nyr_vmm_map_flags {
     NYR_VMM_MAP_WRITE = 1u << 0,
     NYR_VMM_MAP_USER = 1u << 1,
-    NYR_VMM_MAP_EXECUTE = 1u << 2
+    NYR_VMM_MAP_EXECUTE = 1u << 2,
+    NYR_VMM_MAP_UNCACHED = 1u << 3
 };
 
 enum nyr_vmm_page_ownership {

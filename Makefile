@@ -11,7 +11,7 @@ build/entry.o: kernel/entry.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/kernel.o: kernel/kernel.c kernel/include/limine.h kernel/include/memory.h kernel/include/serial.h kernel/include/interrupts.h kernel/include/vmm.h kernel/include/smp.h
+build/kernel.o: kernel/kernel.c kernel/include/limine.h kernel/include/memory.h kernel/include/serial.h kernel/include/interrupts.h kernel/include/vmm.h kernel/include/smp.h kernel/include/lapic.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -23,7 +23,11 @@ build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h kernel/in
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h kernel/include/vmm.h kernel/include/interrupts.h
+build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h kernel/include/vmm.h kernel/include/interrupts.h kernel/include/lapic.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/lapic.o: kernel/lapic.c kernel/include/lapic.h kernel/include/vmm.h kernel/include/interrupts.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -35,7 +39,7 @@ build/serial.o: kernel/serial.c kernel/include/serial.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/interrupts.o: kernel/interrupts.c kernel/include/interrupts.h kernel/include/serial.h
+build/interrupts.o: kernel/interrupts.c kernel/include/interrupts.h kernel/include/serial.h kernel/include/lapic.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -43,8 +47,8 @@ build/interrupts_asm.o: kernel/interrupts.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lock.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lock.o -o $@
+build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o kernel/linker.ld
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o -o $@
 
 test-host: test-pmm-host test-vmm-host test-smp-host test-lock-host
 

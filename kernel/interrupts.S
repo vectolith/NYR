@@ -83,6 +83,7 @@ ISR_NOERR 28
 ISR_ERROR 29
 ISR_ERROR 30
 ISR_NOERR 31
+ISR_NOERR 255
 
 .global nyr_isr_common
 .type nyr_isr_common, @function

@@ -2,6 +2,7 @@
 #include "include/limine.h"
 #include "include/vmm.h"
 #include "include/interrupts.h"
+#include "include/lapic.h"
 #define NYR_SMP_MAX_CPUS UINT64_C(256)
 #define LIMINE_MP_KNOWN_FLAGS LIMINE_MP_RESPONSE_X86_64_X2APIC
 
@@ -43,6 +44,7 @@ static void nyr_smp_ap_entry(struct limine_mp_info *info) {
     if (state->processor_id != info->processor_id ||
         state->lapic_id != info->lapic_id || !nyr_vmm_enable_nx() ||
         !nyr_interrupts_init_cpu(state->architecture_index, info->lapic_id, false) ||
+        !nyr_lapic_init_cpu(info->lapic_id) ||
         nyr_cpu_local_index() != state->architecture_index ||
         nyr_cpu_local_lapic_id() != info->lapic_id) {
         __atomic_add_fetch(&failed_cpus, 1, __ATOMIC_RELEASE);
@@ -50,7 +52,7 @@ static void nyr_smp_ap_entry(struct limine_mp_info *info) {
     }
     __atomic_store_n(&state->online, 1u, __ATOMIC_RELEASE);
     __atomic_add_fetch(&online_cpus, 1u, __ATOMIC_RELEASE);
-    /* Keep APs parked until APIC routing, interrupt handlers and scheduling are ready. */
+    /* APs service only explicit NMIs; maskable interrupts and scheduling stay disabled. */
     ap_park_forever();
 }
 
@@ -124,8 +126,19 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
         __atomic_store_n(&info->goto_address, nyr_smp_ap_entry, __ATOMIC_RELEASE);
     }
     for (uint64_t spin = 0; spin < spin_limit; ++spin) {
-        if (__atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE) == topology->cpu_count)
-            return __atomic_load_n(&failed_cpus, __ATOMIC_ACQUIRE) == 0;
+        if (__atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE) == topology->cpu_count) {
+            if (__atomic_load_n(&failed_cpus, __ATOMIC_ACQUIRE) != 0) return false;
+            for (uint64_t i = 0; i < topology->cpu_count; ++i) {
+                if (i == bsp_index) continue;
+                const struct nyr_smp_cpu_state *state = &cpu_state[i];
+                if (!nyr_lapic_send_nmi(state->lapic_id,
+                                        state->architecture_index, spin_limit)) {
+                    __atomic_add_fetch(&failed_cpus, 1u, __ATOMIC_RELEASE);
+                    return false;
+                }
+            }
+            return true;
+        }
         __asm__ volatile ("pause" ::: "memory");
     }
     return false;

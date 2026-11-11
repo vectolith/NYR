@@ -10,6 +10,8 @@
 #define X86_PTE_PRESENT     (UINT64_C(1) << 0)
 #define X86_PTE_WRITABLE    (UINT64_C(1) << 1)
 #define X86_PTE_USER        (UINT64_C(1) << 2)
+#define X86_PTE_WRITE_THROUGH (UINT64_C(1) << 3)
+#define X86_PTE_CACHE_DISABLE (UINT64_C(1) << 4)
 #define X86_PTE_HUGE        (UINT64_C(1) << 7)
 #define X86_PTE_OWNED_TABLE (UINT64_C(1) << 9)
 #define X86_PTE_OWNED_PAGE  (UINT64_C(1) << 10)
@@ -245,7 +247,8 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
                       uint32_t flags,
                       enum nyr_vmm_page_ownership ownership) {
     const uint32_t allowed_flags =
-        NYR_VMM_MAP_WRITE | NYR_VMM_MAP_USER | NYR_VMM_MAP_EXECUTE;
+        NYR_VMM_MAP_WRITE | NYR_VMM_MAP_USER | NYR_VMM_MAP_EXECUTE |
+        NYR_VMM_MAP_UNCACHED;
     if (!canonical_48(virtual_address) ||
         (virtual_address & NYR_PAGE_MASK) != 0 ||
         (physical_address & NYR_PAGE_MASK) != 0 ||
@@ -328,6 +331,8 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
             if ((flags & NYR_VMM_MAP_WRITE) != 0) value |= X86_PTE_WRITABLE;
             if ((flags & NYR_VMM_MAP_USER) != 0) value |= X86_PTE_USER;
             if ((flags & NYR_VMM_MAP_EXECUTE) == 0) value |= X86_PTE_NO_EXECUTE;
+            if ((flags & NYR_VMM_MAP_UNCACHED) != 0)
+                value |= X86_PTE_WRITE_THROUGH | X86_PTE_CACHE_DISABLE;
             if (ownership == NYR_VMM_PAGE_OWNED) value |= X86_PTE_OWNED_PAGE;
             *leaf = value;
             invalidate_page(virtual_address);

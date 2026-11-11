@@ -23,7 +23,7 @@ Open the repository, select `codespaces-development`, then choose **Code → Cod
 - CI sets four build jobs and boots QEMU with four virtual CPUs.
 - QEMU uses multi-threaded TCG (`-accel tcg,thread=multi`) so guest vCPUs can execute on separate host threads when host capacity permits.
 - Set `NYR_CPUS` to change the QEMU virtual CPU count; it defaults to `4`.
-- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The kernel now validates the CPU inventory supplied by Limine's x86-64 MP protocol, including unique processor/LAPIC IDs and BSP identification. It does not yet start application processors. AP startup remains gated on per-CPU stacks and TSS state, local APIC/IPI routing, SMP-safe PMM/page-table synchronization, and remote TLB shootdowns.
+- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The kernel now validates the CPU inventory supplied by Limine's x86-64 MP protocol, including unique processor/LAPIC IDs and BSP identification. It starts APs through Limine's protocol-defined entry path after installing private per-CPU descriptor state and initializing local APICs. APs acknowledge NMI IPIs on dedicated IST stacks, then remain halted with maskable interrupts disabled. Maskable IPI routing, remote TLB shootdowns, and scheduler handoff remain gated.
 
 ## Build
 
@@ -56,7 +56,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel still has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. CPU topology discovery is implemented; AP execution is not. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is an early-kernel milestone, not yet a complete general-purpose OS. The kernel has per-CPU descriptor state, local APIC initialization, and tested NMI IPI delivery to parked APs. APs do not yet execute scheduler work or accept maskable interrupts. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths use SMP spinlocks, but remote TLB shootdowns are not yet implemented. APs remain parked with interrupts disabled after their NMI acknowledgement. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -64,10 +64,10 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 ## Next milestones
 
-1. Virtual memory mapping/unmapping with explicit page ownership, permission enforcement, and TLB invalidation.
-2. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
-3. Per-CPU GDT/TSS/IDT and local APIC/IPI routing; then SMP-safe PMM/page-table locks and remote TLB shootdowns.
-4. Scheduler, processes, ring 3 and syscall ABI.
+1. Maskable IPI vectors and remote TLB shootdown protocol, including bounded acknowledgement and failure handling.
+2. IOAPIC/legacy PIC routing, interrupt masking, and timer calibration.
+3. SMP scheduler handoff and per-CPU run queues.
+4. Processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.
 
 ## Virtual memory management
@@ -80,7 +80,7 @@ The VMM requests four-level paging from Limine and walks the active CR3 hierarch
 - Boot self-test validates kernel text, the active stack, HHDM access, owned/borrowed mapping lifetimes, and a read-only/executable permission transition.
 - Host tests use synthetic page tables to verify translations, huge pages, effective permissions, and malformed mappings.
 
-Existing 1 GiB and 2 MiB mappings are translated but not yet split for 4 KiB edits. TLB invalidation is local (`invlpg`) only. The current kernel has no AP startup or IPI path, so page-table mutation and the PMM are single-CPU only; remote TLB shootdowns are not yet available.
+Existing 1 GiB and 2 MiB mappings are translated but not yet split for 4 KiB edits. TLB invalidation is local (`invlpg`) only. AP startup and NMI IPI delivery are implemented, and PMM/VMM mutation paths use SMP spinlocks. Remote TLB shootdowns are not yet available; local `invlpg` alone is insufficient once APs execute shared address-space work.
 
 ## Physical memory manager
 
@@ -93,27 +93,34 @@ The early physical page-frame allocator consumes Limine's memory-map and HHDM re
 - Provides frame allocation, release, allocation counters, and rejection of unaligned, unmanaged, and double-freed addresses.
 - Runs a QEMU boot self-test covering unique aligned allocations, invalid frees, metadata protection, release, and reuse.
 
-The allocator is deliberately single-CPU at this stage. It must gain interrupt-safe/SMP synchronization before being called concurrently or from interrupt context.
+The allocator's allocation, release, claim, and accounting paths are serialized by an IRQ-saving SMP spinlock. Initialization remains a BSP-only boot phase; allocator use from interrupt context is not yet supported.
 
 
 ## Per-CPU architecture and SMP safety
 
-The bootstrap processor installs a shared, immutable IDT for the architectural
-exception vectors and initializes its private x86-64 GDT, TSS, double-fault IST
-stack, kernel-entry stack, and GS-based CPU-local record. Each application
-processor performs the same private descriptor/TSS/GS initialization before it
-is counted online. The TSS I/O-permission bitmap denies port I/O by default.
-The current exception dispatcher handles the breakpoint self-test and treats
-other exceptions as fatal.
+The BSP and each AP install private x86-64 GDT/TSS state, kernel-entry stacks,
+double-fault IST stacks, NMI IST stacks, and GS-based CPU-local records. The
+shared IDT handles architectural exceptions, the breakpoint self-test, NMI
+IPI acknowledgements, and the APIC spurious vector. The TSS I/O-permission
+bitmap denies port I/O by default.
 
-The kernel spinlock primitive uses acquire/release atomics and an IRQ-saving
-critical-section API. PMM allocation/accounting and active-address-space VMM
-mapping, protection, unmapping, and translation paths are serialized. Host
-tests exercise lock contention across four threads.
+The local APIC is initialized in the mode reported by Limine. xAPIC uses a
+dedicated kernel mapping with PWT+PCD leaf attributes; x2APIC uses MSRs. The
+kernel validates each hardware LAPIC ID, masks supported local-vector-table
+sources, and enables the APIC software interface. NMI IPIs are sent with a
+bounded acknowledgement protocol and handled on per-CPU IST stacks. The BSP
+self-test and QEMU boot test exercise BSP and AP NMI delivery.
 
-**AP execution remains deliberately gated.** APs finish per-CPU architecture
-initialization, publish their online state, and park with interrupts disabled.
-NYR does not yet enable external interrupts, configure local APIC routing or
-IPIs, perform remote TLB shootdowns, or schedule work on APs. Those facilities
-must be implemented and verified before APs are released into shared kernel
-execution.
+The kernel spinlock primitive uses acquire/release atomics and IRQ-save
+critical sections. PMM allocation, release, claims, and accounting are
+serialized. Active-address-space VMM mapping, protection, unmapping, and
+translation are serialized. Owned VMM mappings claim PMM frames against
+concurrent release. Host tests include four-thread lock contention and CPU
+local-index assignment with the BSP in every possible slot.
+
+**AP execution remains deliberately gated.** APs complete per-CPU and local
+APIC initialization, acknowledge NMI IPIs, then return to `cli; hlt`. They
+do not accept maskable interrupts or execute scheduler work. Maskable IPI
+delivery, remote TLB shootdowns, IOAPIC/legacy PIC routing, timer setup, and
+scheduler handoff remain unimplemented. Local `invlpg` is not a substitute
+for remote TLB shootdowns once APs execute shared address-space work.

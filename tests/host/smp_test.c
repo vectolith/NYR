@@ -22,6 +22,10 @@ bool nyr_interrupts_init_cpu(uint32_t cpu_index, uint32_t lapic_id, bool bootstr
 }
 uint32_t nyr_cpu_local_index(void) { return 0u; }
 uint32_t nyr_cpu_local_lapic_id(void) { return 2u; }
+bool nyr_lapic_init_cpu(uint32_t lapic_id) { (void)lapic_id; return true; }
+bool nyr_lapic_send_nmi(uint32_t lapic_id, uint32_t cpu_index, uint64_t spin_limit) {
+    (void)lapic_id; (void)cpu_index; (void)spin_limit; return true;
+}
 
 static int expect_rejected(const char *name,
                            const struct limine_mp_response *response) {

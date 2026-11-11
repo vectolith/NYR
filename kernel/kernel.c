@@ -6,6 +6,7 @@
 #include "include/interrupts.h"
 #include "include/vmm.h"
 #include "include/smp.h"
+#include "include/lapic.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -187,12 +188,20 @@ void nyr_kernel_main(void) {
     }
     nyr_serial_write("NYR: virtual memory mapping, ownership, and TLB self-tests passed\r\n");
     if (mp_response != 0) {
+        if (!nyr_lapic_prepare(hhdm->offset, topology.x2apic) ||
+            !nyr_lapic_init_cpu(topology.bsp_lapic_id) ||
+            !nyr_lapic_send_nmi(topology.bsp_lapic_id, 0u, UINT64_C(1000000))) {
+            nyr_serial_write("NYR: local APIC initialization/self-test failed\r\n");
+            halt_forever();
+        }
+        nyr_serial_write("NYR: local APIC initialized; BSP NMI self-test passed\r\n");
         if (!nyr_smp_start_aps(mp_response, &topology, UINT64_C(50000000))) {
             serial_line("NYR: SMP AP startup failed; online CPUs ", nyr_smp_online_count());
             serial_line("NYR: SMP AP startup failures ", nyr_smp_failed_count());
             halt_forever();
         }
         serial_line("NYR: SMP application processors online ", nyr_smp_online_count());
+        nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
     }
