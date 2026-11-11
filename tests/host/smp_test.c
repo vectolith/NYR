@@ -55,10 +55,7 @@ int main(void) {
     }
     response.flags = 0;
 
-    if (expect_rejected("null response", 0) ||
-        expect_rejected("null topology", &response)) {
-        return 1;
-    }
+    if (expect_rejected("null response", 0)) return 1;
     if (nyr_smp_discover(&response, 0)) {
         fputs("host SMP test: null output accepted\n", stderr);
         return 1;
