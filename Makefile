@@ -19,7 +19,7 @@ build/memory.o: kernel/memory.c kernel/include/memory.h kernel/include/limine.h 
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h kernel/include/lock.h
+build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h kernel/include/lock.h kernel/include/smp.h kernel/include/serial.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 

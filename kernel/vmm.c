@@ -1,6 +1,8 @@
 #include "include/vmm.h"
 #include "include/memory.h"
 #include "include/lock.h"
+#include "include/smp.h"
+#include "include/serial.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -250,6 +252,12 @@ bool nyr_vmm_translate_current(uint64_t hhdm_offset,
     return result;
 }
 
+static __attribute__((noreturn)) void remote_tlb_fail_stop(void) {
+    nyr_serial_write("NYR: fatal remote TLB shootdown failure\r\n");
+    __asm__ volatile ("cli" ::: "memory");
+    for (;;) __asm__ volatile ("hlt" ::: "memory");
+}
+
 bool nyr_vmm_map_page(uint64_t hhdm_offset,
                       uint64_t virtual_address,
                       uint64_t physical_address,
@@ -345,6 +353,8 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
             if (ownership == NYR_VMM_PAGE_OWNED) value |= X86_PTE_OWNED_PAGE;
             *leaf = value;
             invalidate_page(virtual_address);
+            if (!nyr_smp_tlb_shootdown(virtual_address))
+                remote_tlb_fail_stop();
         }
     }
 
@@ -458,6 +468,7 @@ bool nyr_vmm_protect_page(uint64_t hhdm_offset,
     if ((flags & NYR_VMM_MAP_EXECUTE) == 0) replacement |= X86_PTE_NO_EXECUTE;
     *leaf = replacement;
     invalidate_page(virtual_address);
+    if (!nyr_smp_tlb_shootdown(virtual_address)) remote_tlb_fail_stop();
     nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
     return true;
 }
@@ -517,10 +528,12 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
                               : NYR_VMM_PAGE_BORROWED;
     *leaf = 0;
     invalidate_page(virtual_address);
+    if (!nyr_smp_tlb_shootdown(virtual_address)) remote_tlb_fail_stop();
     if (unmapped->ownership == NYR_VMM_PAGE_OWNED &&
         !nyr_pmm_release_claim(unmapped->physical_address)) {
         *leaf = entry;
         invalidate_page(virtual_address);
+        if (!nyr_smp_tlb_shootdown(virtual_address)) remote_tlb_fail_stop();
         nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
         return false;
     }
@@ -538,6 +551,44 @@ bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
 
     nyr_spin_unlock_irqrestore(&vmm_lock, irq_state);
     return true;
+}
+
+bool nyr_vmm_smp_self_test(uint64_t hhdm_offset) {
+    const uint64_t virtual_address = UINT64_C(0xffffd00000000000);
+    struct nyr_vmm_translation translation;
+    if (nyr_vmm_translate_current(hhdm_offset, virtual_address, &translation))
+        return false;
+
+    const uint64_t frame = nyr_pmm_alloc_frame();
+    if (frame == 0) return false;
+    if (!nyr_vmm_map_page(hhdm_offset, virtual_address, frame, 0,
+                          NYR_VMM_PAGE_OWNED)) {
+        (void)nyr_pmm_free_frame(frame);
+        return false;
+    }
+
+    const bool mapped = nyr_vmm_translate_current(
+        hhdm_offset, virtual_address, &translation) &&
+        translation.physical_address == frame && !translation.writable &&
+        !translation.executable && !translation.user_accessible;
+    const bool protected = nyr_vmm_protect_page(
+        hhdm_offset, virtual_address, NYR_VMM_MAP_WRITE);
+    const bool writable = protected &&
+        nyr_vmm_translate_current(hhdm_offset, virtual_address, &translation) &&
+        translation.physical_address == frame && translation.writable &&
+        !translation.executable;
+
+    struct nyr_vmm_unmapped_page unmapped;
+    const bool removed = nyr_vmm_unmap_page(
+        hhdm_offset, virtual_address, &unmapped);
+    if (!removed) return false;
+    const bool absent = !nyr_vmm_translate_current(
+        hhdm_offset, virtual_address, &translation);
+    const bool ownership_returned =
+        unmapped.physical_address == frame &&
+        unmapped.ownership == NYR_VMM_PAGE_OWNED;
+    const bool freed = ownership_returned && nyr_pmm_free_frame(frame);
+    return mapped && writable && absent && freed;
 }
 
 bool nyr_vmm_self_test(uint64_t hhdm_offset) {

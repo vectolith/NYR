@@ -201,6 +201,11 @@ void nyr_kernel_main(void) {
             halt_forever();
         }
         serial_line("NYR: SMP application processors online ", nyr_smp_online_count());
+        if (!nyr_vmm_smp_self_test(hhdm->offset)) {
+            nyr_serial_write("NYR: remote TLB shootdown self-test failed\r\n");
+            halt_forever();
+        }
+        nyr_serial_write("NYR: remote TLB shootdown self-test passed\r\n");
         nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");

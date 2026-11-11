@@ -11,6 +11,11 @@ bool nyr_lapic_init_cpu(uint32_t expected_lapic_id);
 bool nyr_lapic_send_nmi(uint32_t destination_lapic_id,
                         uint32_t destination_cpu_index,
                         uint64_t spin_limit);
+/* Send an NMI-based remote TLB invalidation and wait for its acknowledgement. */
+bool nyr_lapic_send_tlb_invalidate(uint32_t destination_lapic_id,
+                                   uint32_t destination_cpu_index,
+                                   uint64_t virtual_address,
+                                   uint64_t spin_limit);
 /* Called by the NMI exception dispatcher; false means an unexpected NMI. */
 bool nyr_lapic_handle_nmi(void);
 #endif

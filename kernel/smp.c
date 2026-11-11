@@ -143,6 +143,28 @@ bool nyr_smp_start_aps(struct limine_mp_response *response,
     }
     return false;
 }
+bool nyr_smp_tlb_shootdown(uint64_t virtual_address) {
+    const uint64_t count = __atomic_load_n(&configured_cpu_count, __ATOMIC_ACQUIRE);
+    if (count == 0) return true;
+    if (count > NYR_SMP_MAX_CPUS ||
+        __atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE) != count ||
+        __atomic_load_n(&failed_cpus, __ATOMIC_ACQUIRE) != 0) return false;
+
+    for (uint64_t i = 0; i < count; ++i) {
+        const struct nyr_smp_cpu_state *state = &cpu_state[i];
+        if (state->architecture_index == 0u) continue;
+        if (__atomic_load_n(&state->online, __ATOMIC_ACQUIRE) != 1u ||
+            !nyr_lapic_send_tlb_invalidate(state->lapic_id,
+                                          state->architecture_index,
+                                          virtual_address,
+                                          UINT64_C(50000000))) {
+            __atomic_add_fetch(&failed_cpus, 1u, __ATOMIC_RELEASE);
+            return false;
+        }
+    }
+    return true;
+}
+
 uint64_t nyr_smp_online_count(void) {
     return __atomic_load_n(&online_cpus, __ATOMIC_ACQUIRE);
 }

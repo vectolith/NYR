@@ -6,6 +6,13 @@
 
 #include "../../kernel/include/vmm.h"
 
+void nyr_serial_write(const char *text) { (void)text; }
+
+bool nyr_smp_tlb_shootdown(uint64_t virtual_address) {
+    (void)virtual_address;
+    return true;
+}
+
 #define PAGE_SIZE UINT64_C(4096)
 #define P UINT64_C(0x001)
 #define RW UINT64_C(0x002)

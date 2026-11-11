@@ -42,6 +42,10 @@
 #define X2APIC_LVT_ERROR UINT32_C(0x837)
 #define APIC_LVT_COUNT 7u
 #define APIC_NMI_DELIVERY (UINT32_C(4) << 8)
+#define NYR_NMI_COMMAND_PING 1u
+#define NYR_NMI_COMMAND_TLB_INVALIDATE 2u
+#define NYR_NMI_MAILBOX_WRITING 1u
+#define NYR_NMI_MAILBOX_READY 2u
 
 static bool lapic_prepared;
 static bool lapic_x2apic;
@@ -49,6 +53,8 @@ static uint64_t lapic_physical_base;
 static uint64_t lapic_hhdm_offset;
 static volatile uint32_t *lapic_mmio;
 static uint32_t nmi_pending[NYR_LAPIC_MAX_CPUS];
+static uint32_t nmi_command[NYR_LAPIC_MAX_CPUS];
+static uint64_t nmi_address[NYR_LAPIC_MAX_CPUS];
 static uint64_t nmi_acknowledged[NYR_LAPIC_MAX_CPUS];
 
 static uint64_t read_msr(uint32_t msr) {
@@ -191,15 +197,34 @@ static bool send_nmi_ipi(uint32_t destination_lapic_id, uint64_t spin_limit) {
     return true;
 }
 
-bool nyr_lapic_send_nmi(uint32_t destination_lapic_id,
-                        uint32_t destination_cpu_index,
-                        uint64_t spin_limit) {
+static bool canonical_48(uint64_t address) {
+    const uint64_t upper = address >> 48;
+    const bool sign = ((address >> 47) & 1u) != 0;
+    return sign ? upper == UINT64_C(0xffff) : upper == 0;
+}
+
+static bool send_nmi_command(uint32_t destination_lapic_id,
+                             uint32_t destination_cpu_index,
+                             uint32_t command,
+                             uint64_t address,
+                             uint64_t spin_limit) {
     if (!lapic_prepared || destination_cpu_index >= NYR_LAPIC_MAX_CPUS ||
         spin_limit == 0 ||
-        __atomic_exchange_n(&nmi_pending[destination_cpu_index], 1u,
-                            __ATOMIC_ACQ_REL) != 0u) return false;
+        (command == NYR_NMI_COMMAND_TLB_INVALIDATE && !canonical_48(address))) {
+        return false;
+    }
     const uint64_t before = __atomic_load_n(
         &nmi_acknowledged[destination_cpu_index], __ATOMIC_ACQUIRE);
+    uint32_t expected = 0;
+    if (!__atomic_compare_exchange_n(&nmi_pending[destination_cpu_index],
+                                     &expected, NYR_NMI_MAILBOX_WRITING, false,
+                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        return false;
+    }
+    __atomic_store_n(&nmi_command[destination_cpu_index], command, __ATOMIC_RELAXED);
+    __atomic_store_n(&nmi_address[destination_cpu_index], address, __ATOMIC_RELAXED);
+    __atomic_store_n(&nmi_pending[destination_cpu_index],
+                     NYR_NMI_MAILBOX_READY, __ATOMIC_RELEASE);
     if (!send_nmi_ipi(destination_lapic_id, spin_limit)) {
         __atomic_store_n(&nmi_pending[destination_cpu_index], 0u, __ATOMIC_RELEASE);
         return false;
@@ -209,16 +234,45 @@ bool nyr_lapic_send_nmi(uint32_t destination_lapic_id,
                             __ATOMIC_ACQUIRE) != before) return true;
         __asm__ volatile ("pause" ::: "memory");
     }
-    /* Keep the mailbox armed: an already-issued NMI may arrive late. */
+    /* Keep an issued command armed: a delayed NMI must still service it. */
     return false;
+}
+
+bool nyr_lapic_send_nmi(uint32_t destination_lapic_id,
+                        uint32_t destination_cpu_index,
+                        uint64_t spin_limit) {
+    return send_nmi_command(destination_lapic_id, destination_cpu_index,
+                            NYR_NMI_COMMAND_PING, 0, spin_limit);
+}
+
+bool nyr_lapic_send_tlb_invalidate(uint32_t destination_lapic_id,
+                                   uint32_t destination_cpu_index,
+                                   uint64_t virtual_address,
+                                   uint64_t spin_limit) {
+    if ((virtual_address & 0xfffu) != 0) return false;
+    return send_nmi_command(destination_lapic_id, destination_cpu_index,
+                            NYR_NMI_COMMAND_TLB_INVALIDATE,
+                            virtual_address, spin_limit);
 }
 
 bool nyr_lapic_handle_nmi(void) {
     const uint32_t index = nyr_cpu_local_index();
     if (index >= NYR_LAPIC_MAX_CPUS ||
-        __atomic_exchange_n(&nmi_pending[index], 0u, __ATOMIC_ACQ_REL) == 0u) {
+        __atomic_load_n(&nmi_pending[index], __ATOMIC_ACQUIRE) !=
+            NYR_NMI_MAILBOX_READY) return false;
+
+    const uint32_t command =
+        __atomic_load_n(&nmi_command[index], __ATOMIC_RELAXED);
+    if (command == NYR_NMI_COMMAND_TLB_INVALIDATE) {
+        const uint64_t address =
+            __atomic_load_n(&nmi_address[index], __ATOMIC_RELAXED);
+        if (!canonical_48(address) || (address & 0xfffu) != 0) return false;
+        __asm__ volatile ("invlpg (%0)" : : "r"((uintptr_t)address) : "memory");
+    } else if (command != NYR_NMI_COMMAND_PING) {
         return false;
     }
+
+    __atomic_store_n(&nmi_pending[index], 0u, __ATOMIC_RELEASE);
     __atomic_add_fetch(&nmi_acknowledged[index], 1u, __ATOMIC_RELEASE);
     return true;
 }

@@ -27,8 +27,8 @@ bool nyr_vmm_translate_current(uint64_t hhdm_offset,
                                uint64_t virtual_address,
                                struct nyr_vmm_translation *translation);
 
-/* Validate kernel text, the active stack, and a PMM-backed HHDM mapping. */
-bool nyr_vmm_self_test(uint64_t hhdm_offset);
+/* Exercise cross-CPU invalidation after APs have completed NMI setup. */
+bool nyr_vmm_smp_self_test(uint64_t hhdm_offset);
 
 enum nyr_vmm_map_flags {
     NYR_VMM_MAP_WRITE = 1u << 0,
