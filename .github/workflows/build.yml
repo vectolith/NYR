@@ -25,13 +25,13 @@ jobs:
       - name: Install pinned build and emulator dependencies
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file
       - name: Record tool versions
         run: |
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso
+          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
       - run: make preflight
       - name: Build kernel and UEFI ISO
         run: make clean all iso
