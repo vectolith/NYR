@@ -2,7 +2,7 @@ NYR_TOOLS_MOUNT ?= /mnt/tools
 RUN_WITH_TOOLS = NYR_TOOLS_MOUNT=$(NYR_TOOLS_MOUNT) ./tools/with-tools.sh
 CC ?= cc
 LD ?= ld
-CFLAGS = -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -mcmodel=kernel -Wall -Wextra -Werror -O2
+CFLAGS = -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -mgeneral-regs-only -mcmodel=kernel -Wall -Wextra -Werror -O2
 LDFLAGS = -nostdlib -static -no-pie -z max-page-size=0x1000 -z noexecstack --build-id=none -T kernel/linker.ld
 
 all: build/nyr-kernel.elf
