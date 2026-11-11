@@ -48,6 +48,14 @@ static volatile struct limine_memmap_request memory_map_request = {
 };
 
 LIMINE_REQUEST
+static volatile struct limine_stack_size_request stack_size_request = {
+    .id = LIMINE_STACK_SIZE_REQUEST_ID,
+    .revision = 0,
+    .response = 0,
+    .stack_size = 65536
+};
+
+LIMINE_REQUEST
 static volatile struct limine_mp_request mp_request = {
     .id = LIMINE_MP_REQUEST_ID,
     .revision = 0,
@@ -113,7 +121,6 @@ void nyr_kernel_main(void) {
         nyr_serial_write(topology.x2apic
             ? "NYR: SMP topology reports x2APIC mode\r\n"
             : "NYR: SMP topology reports xAPIC mode\r\n");
-        nyr_serial_write("NYR: AP startup deferred until per-CPU state and interrupt routing are ready\r\n");
     }
 
     struct limine_framebuffer_response *fb_response = framebuffer_request.response;
@@ -177,6 +184,17 @@ void nyr_kernel_main(void) {
         halt_forever();
     }
     nyr_serial_write("NYR: virtual memory mapping, ownership, and TLB self-tests passed\r\n");
+    if (mp_response != 0) {
+        if (!nyr_smp_start_aps(mp_response, &topology, UINT64_C(50000000))) {
+            serial_line("NYR: SMP AP startup failed; online CPUs ", nyr_smp_online_count());
+            serial_line("NYR: SMP AP startup failures ", nyr_smp_failed_count());
+            halt_forever();
+        }
+        serial_line("NYR: SMP application processors online ", nyr_smp_online_count());
+    } else {
+        nyr_serial_write("NYR: SMP AP startup skipped; no MP response\\r\\n");
+    }
+    nyr_serial_write("NYR: SMP CPUs parked with interrupts disabled; scheduler not enabled\\r\\n");
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }
