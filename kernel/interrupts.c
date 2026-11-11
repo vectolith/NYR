@@ -143,7 +143,7 @@ void nyr_exception_dispatch(struct nyr_exception_frame *frame) {
         nyr_serial_write(" CR2 ");
         nyr_serial_write_hex(fault_address);
     }
-    nyr_serial_write("\\r\\n");
+    nyr_serial_write("\r\n");
     exception_halt();
 }
 
