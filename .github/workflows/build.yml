@@ -16,12 +16,15 @@ jobs:
       image: mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724
       options: --user root
     timeout-minutes: 20
+    env:
+      NYR_JOBS: "4"
+      NYR_CPUS: "4"
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
       - name: Configure immutable Ubuntu package snapshot
         run: |
           . ./toolchain.lock
-          printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+          printf 'APT::Snapshot "%s";\\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
       - name: Install pinned build and emulator dependencies
         run: |
           apt-get update
@@ -31,12 +34,14 @@ jobs:
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
+          dpkg-query -W -f='${binary:Package}=${Version}\\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
       - run: make preflight
       - name: Run host-side memory manager tests
-        run: make test-host
+        run: make -j4 test-host
       - name: Build kernel and UEFI ISO
-        run: make clean all iso
+        run: |
+          make clean
+          make -j4 all iso
       - name: Verify ELF and ISO artifacts
         run: |
           file build/nyr-kernel.elf build/nyr-uefi.iso

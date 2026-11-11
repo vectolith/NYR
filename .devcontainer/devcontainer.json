@@ -4,9 +4,12 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
+  "hostRequirements": {
+    "cpus": 4
+  },
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
-  "postCreateCommand": "make preflight && make",
+  "postCreateCommand": "make preflight && make -j4 all",
   "customizations": {
     "vscode": {
       "extensions": [

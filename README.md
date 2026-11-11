@@ -14,15 +14,24 @@ The build inputs are recorded in `toolchain.lock`:
 
 Both Codespaces and CI use the same base image and Ubuntu package snapshot. Package versions are also recorded in `/etc/nyr-toolchain-packages.txt` in the development container and in CI logs. Updating the snapshot is an intentional toolchain change and must be followed by the complete build and boot validation.
 
-Open the repository, select `codespaces-development`, then choose **Code → Codespaces → Create codespace**. Use the browser-based VS Code terminal on iPhone.
+Open the repository, select `codespaces-development`, then choose **Code → Codespaces → Create codespace**. Use the browser-based VS Code terminal on iPhone. Codespaces is configured to request a four-core machine.
+
+## CPU and parallel build configuration
+
+- The default development build uses up to four host CPUs. `NYR_JOBS` can override the CI job count; local Make invocations can use `make -j4`.
+- Independent PMM and VMM host test binaries are separate Make targets and can run concurrently.
+- CI sets four build jobs and boots QEMU with four virtual CPUs.
+- QEMU uses multi-threaded TCG (`-accel tcg,thread=multi`) so guest vCPUs can execute on separate host threads when host capacity permits.
+- Set `NYR_CPUS` to change the QEMU virtual CPU count; it defaults to `4`.
+- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The current kernel still initializes and runs only on the bootstrap processor. Application processors remain unused until ACPI discovery, AP startup, APIC/IPI routing, per-CPU state, locking, and remote TLB shootdowns are implemented and tested.
 
 ## Build
 
 ```sh
 make preflight
-make test-host
-make clean all
-make iso
+make -j4 test-host
+make clean
+make -j4 all iso
 ```
 
 Outputs: `build/nyr-kernel.elf` and `build/nyr-uefi.iso`. The ISO builder verifies the Limine binary release digest, builds the host installer shipped as source in that archive, and creates the documented hybrid ISO layout.
@@ -34,7 +43,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership/TLB self-tests, and the final boot milestone on COM1. CI also runs host-side PMM tests against valid, overlapping, and overflowing memory maps.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership/TLB self-tests, and the final boot milestone on COM1. CI also runs host-side PMM and VMM tests.
 
 ## Current boot architecture
 
@@ -47,11 +56,11 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
-GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO structure, boots the image under QEMU/OVMF, and verifies serial markers. The successful boot run is recorded in the pull request.
+GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO structure, boots the image under four QEMU vCPUs, and verifies serial markers. The successful boot run is recorded in the pull request.
 
 ## Next milestones
 
@@ -60,7 +69,6 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 3. Kernel heap and synchronization primitives, including SMP-safe PMM locking.
 4. Scheduler, processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.
-
 
 ## Virtual memory management
 
@@ -85,4 +93,4 @@ The early physical page-frame allocator consumes Limine's memory-map and HHDM re
 - Provides frame allocation, release, allocation counters, and rejection of unaligned, unmanaged, and double-freed addresses.
 - Runs a QEMU boot self-test covering unique aligned allocations, invalid frees, metadata protection, release, and reuse.
 
-The allocator is deliberately single-CPU at this stage. It must gain interrupt-safe/SMP synchronization before being called concurrently or from interrupt context. It returns physical addresses; it does not yet create or modify page-table mappings.
+The allocator is deliberately single-CPU at this stage. It must gain interrupt-safe/SMP synchronization before being called concurrently or from interrupt context.

@@ -1,4 +1,5 @@
 NYR_TOOLS_MOUNT ?= /mnt/tools
+NYR_JOBS ?= $(shell nproc 2>/dev/null | awk '{ if ($$1 < 1) print 1; else if ($$1 > 4) print 4; else print $$1 }')
 RUN_WITH_TOOLS = NYR_TOOLS_MOUNT=$(NYR_TOOLS_MOUNT) ./tools/with-tools.sh
 CC ?= cc
 LD ?= ld
@@ -38,8 +39,12 @@ build/interrupts_asm.o: kernel/interrupts.S
 build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/serial.o build/interrupts.o build/interrupts_asm.o kernel/linker.ld
 	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/serial.o build/interrupts.o build/interrupts_asm.o -o $@
 
-test-host:
+test-host: test-pmm-host test-vmm-host
+
+test-pmm-host:
 	@sh tools/test-pmm-host.sh
+
+test-vmm-host:
 	@sh tools/test-vmm-host.sh
 
 iso: all
@@ -68,4 +73,4 @@ toolchain-info:
 clean:
 	rm -rf build
 
-.PHONY: all clean check-env preflight test-host iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info
+.PHONY: all clean check-env preflight test-host test-pmm-host test-vmm-host iso qemu-smoke qemu-boot-smoke qemu-run toolchain-info
