@@ -7,8 +7,6 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Push and pull_request events for the same commit must not run duplicate
-  # package-install/build pipelines against the same immutable snapshot.
   group: nyr-ci-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 jobs:
@@ -18,11 +16,14 @@ jobs:
       image: mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724
       options: --user root
     timeout-minutes: 20
-    env:
-      NYR_JOBS: "4"
-      NYR_CPUS: "4"
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Detect available CPU capacity
+        run: |
+          JOBS="$(tools/available-jobs.sh 4)"
+          echo "NYR_JOBS=$JOBS" >> "$GITHUB_ENV"
+          echo "NYR_CPUS=$JOBS" >> "$GITHUB_ENV"
+          echo "Using $JOBS parallel build jobs and QEMU vCPUs"
       - name: Configure immutable Ubuntu package snapshot
         run: |
           . ./toolchain.lock
@@ -39,10 +40,19 @@ jobs:
       - run: make preflight
       - name: Run host-side memory manager tests
         run: make -j"$NYR_JOBS" test-host
-      - name: Build kernel and UEFI ISO
+      - name: Measure clean and incremental kernel builds
         run: |
           make clean
-          make -j"$NYR_JOBS" all iso
+          mkdir -p build
+          echo "parallel_jobs=$NYR_JOBS" > build/build-timings.txt
+          /usr/bin/time -f 'clean_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          touch kernel/include/serial.h
+          /usr/bin/time -f 'header_incremental_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          touch kernel/serial.c
+          /usr/bin/time -f 'single_source_incremental_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          cat build/build-timings.txt
+      - name: Build UEFI ISO
+        run: make -j"$NYR_JOBS" iso
       - name: Verify ELF and ISO artifacts
         run: |
           file build/nyr-kernel.elf build/nyr-uefi.iso
@@ -56,7 +66,7 @@ jobs:
           xorriso -indev build/nyr-uefi.iso -toc
       - name: Boot UEFI ISO and verify serial output
         run: make qemu-boot-smoke
-      - name: Upload kernel, ISO and boot log
+      - name: Upload kernel, ISO, boot log and build timings
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
@@ -65,6 +75,7 @@ jobs:
             build/nyr-kernel.elf
             build/nyr-uefi.iso
             build/qemu-boot-serial.log
+            build/build-timings.txt
           if-no-files-found: warn
           retention-days: 14
 
