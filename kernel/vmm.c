@@ -16,6 +16,8 @@
 #define X86_2M_ADDRESS     UINT64_C(0x000fffffffe00000)
 #define X86_1G_SIZE        (UINT64_C(1) << 30)
 #define X86_2M_SIZE        (UINT64_C(1) << 21)
+#define X86_1G_RESERVED    UINT64_C(0x000000003fffe000)
+#define X86_2M_RESERVED    UINT64_C(0x00000000001fe000)
 
 static bool canonical_48(uint64_t address) {
     const uint64_t upper = address >> 48;
@@ -99,6 +101,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
     executable = executable && ((entry & X86_PTE_NO_EXECUTE) == 0);
 
     if ((entry & X86_PTE_HUGE) != 0) {
+        if ((entry & X86_1G_RESERVED) != 0) {
+            return false;
+        }
         translation->physical_address =
             (entry & X86_1G_ADDRESS) | (virtual_address & (X86_1G_SIZE - 1u));
         translation->page_size = X86_1G_SIZE;
@@ -124,6 +129,9 @@ bool nyr_vmm_translate_from_root(uint64_t root_physical,
     executable = executable && ((entry & X86_PTE_NO_EXECUTE) == 0);
 
     if ((entry & X86_PTE_HUGE) != 0) {
+        if ((entry & X86_2M_RESERVED) != 0) {
+            return false;
+        }
         translation->physical_address =
             (entry & X86_2M_ADDRESS) | (virtual_address & (X86_2M_SIZE - 1u));
         translation->page_size = X86_2M_SIZE;

@@ -141,10 +141,10 @@ void nyr_kernel_main(void) {
     }
     nyr_serial_write("NYR: PMM self-test passed\r\n");
     if (!nyr_vmm_self_test(hhdm->offset)) {
-        nyr_serial_write("NYR: virtual memory translation self-test failed\\r\\n");
+        nyr_serial_write("NYR: virtual memory translation self-test failed\r\n");
         halt_forever();
     }
-    nyr_serial_write("NYR: virtual memory translation self-test passed\\r\\n");
+    nyr_serial_write("NYR: virtual memory translation self-test passed\r\n");
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }

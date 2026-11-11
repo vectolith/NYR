@@ -86,6 +86,25 @@ static int test_1g(void) {
     return 0;
 }
 
+static int test_reserved_huge_bits(void) {
+    struct nyr_vmm_translation result;
+    tables[512 + 1] = UINT64_C(0x40000000) | P | RW | PS | (UINT64_C(1) << 13);
+    if (nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
+                                    UINT64_C(0x40002345), &result)) {
+        fputs("host VMM test: reserved 1 GiB page bits accepted\\n", stderr);
+        return 1;
+    }
+    tables[512 + 1] = UINT64_C(0x3000) | P | RW | US;
+    tables[1024 + 1] = UINT64_C(0x800000) | P | RW | PS | (UINT64_C(1) << 13);
+    if (nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
+                                    UINT64_C(0x212345), &result)) {
+        fputs("host VMM test: reserved 2 MiB page bits accepted\\n", stderr);
+        return 1;
+    }
+    puts("host VMM test: reserved huge-page address bits rejected");
+    return 0;
+}
+
 static int test_rejections(void) {
     struct nyr_vmm_translation result;
     if (nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
@@ -106,7 +125,7 @@ int main(void) {
         fputs("host VMM test: allocation failed\n", stderr);
         return 1;
     }
-    int result = test_4k() | test_effective_permissions() | test_2m() | test_1g() | test_rejections();
+    int result = test_4k() | test_effective_permissions() | test_2m() | test_1g() | test_reserved_huge_bits() | test_rejections();
     free(tables);
     return result;
 }
