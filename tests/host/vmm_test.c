@@ -42,6 +42,22 @@ static int test_4k(void) {
     return 0;
 }
 
+static int test_effective_permissions(void) {
+    tables[0] = UINT64_C(0x2000) | P | US | NX;
+    struct nyr_vmm_translation result;
+    const bool ok =
+        nyr_vmm_translate_from_root(PAGE_SIZE, hhdm_offset,
+                                    UINT64_C(0x1123), &result) &&
+        !result.writable && !result.executable && result.user_accessible;
+    tables[0] = UINT64_C(0x2000) | P | RW | US;
+    if (!ok) {
+        fputs("host VMM test: inherited permissions were not enforced\\n", stderr);
+        return 1;
+    }
+    puts("host VMM test: effective permissions propagated across levels");
+    return 0;
+}
+
 static int test_2m(void) {
     tables[1024 + 1] = UINT64_C(0x800000) | P | RW | PS;
     struct nyr_vmm_translation result;
@@ -90,7 +106,7 @@ int main(void) {
         fputs("host VMM test: allocation failed\n", stderr);
         return 1;
     }
-    int result = test_4k() | test_2m() | test_1g() | test_rejections();
+    int result = test_4k() | test_effective_permissions() | test_2m() | test_1g() | test_rejections();
     free(tables);
     return result;
 }

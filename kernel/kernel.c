@@ -109,7 +109,7 @@ void nyr_kernel_main(void) {
     struct limine_paging_mode_response *paging_mode = paging_mode_request.response;
     if (paging_mode == 0 ||
         paging_mode->mode != LIMINE_PAGING_MODE_X86_64_4LVL) {
-        nyr_serial_write("NYR: four-level paging mode unavailable\\r\\n");
+        nyr_serial_write("NYR: four-level paging mode unavailable\r\n");
         halt_forever();
     }
 

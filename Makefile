@@ -11,7 +11,7 @@ build/entry.o: kernel/entry.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/kernel.o: kernel/kernel.c kernel/include/limine.h kernel/include/memory.h kernel/include/serial.h kernel/include/interrupts.h
+build/kernel.o: kernel/kernel.c kernel/include/limine.h kernel/include/memory.h kernel/include/serial.h kernel/include/interrupts.h kernel/include/vmm.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -40,6 +40,7 @@ build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o bu
 
 test-host:
 	@sh tools/test-pmm-host.sh
+	@sh tools/test-vmm-host.sh
 
 iso: all
 	@bash tools/build-iso.sh
