@@ -23,7 +23,7 @@ build/vmm.o: kernel/vmm.c kernel/include/vmm.h kernel/include/memory.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h
+build/smp.o: kernel/smp.c kernel/include/smp.h kernel/include/limine.h kernel/include/vmm.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 

@@ -66,7 +66,7 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 
 1. Virtual memory mapping/unmapping with explicit page ownership, permission enforcement, and TLB invalidation.
 2. Interrupt controller setup (PIC/APIC), external IRQ routing, and timer calibration.
-3. Per-CPU stacks/TSS and AP startup through the Limine MP protocol; then local APIC/IPI routing and SMP-safe PMM/page-table locks.
+3. Per-CPU GDT/TSS/IDT and local APIC/IPI routing; then SMP-safe PMM/page-table locks and remote TLB shootdowns.
 4. Scheduler, processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.
 
