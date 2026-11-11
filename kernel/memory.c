@@ -136,18 +136,27 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     uint64_t highest_usable_address = 0;
     for (uint64_t i = 0; i < memory_map->entry_count; ++i) {
         const struct limine_memmap_entry *entry;
-        if (!map_entry(memory_map, i, &entry)) {
+        uint64_t end;
+        if (!map_entry(memory_map, i, &entry) || entry->length == 0 ||
+            add_overflow_u64(entry->base, entry->length, &end)) {
+            pmm_serial_write("NYR: PMM malformed memory-map entry\\r\\n");
             return false;
-        }
-        if (entry->type != LIMINE_MEMMAP_USABLE || entry->length == 0) {
-            continue;
         }
 
-        uint64_t end;
-        if (add_overflow_u64(entry->base, entry->length, &end)) {
-            return false;
+        /* Reject every overlap, including usable-vs-reserved intersections. */
+        for (uint64_t j = 0; j < i; ++j) {
+            const struct limine_memmap_entry *previous;
+            uint64_t previous_end;
+            if (!map_entry(memory_map, j, &previous) ||
+                add_overflow_u64(previous->base, previous->length, &previous_end) ||
+                (entry->base < previous_end && previous->base < end)) {
+                pmm_serial_write("NYR: PMM overlapping memory-map entries\\r\\n");
+                return false;
+            }
         }
-        if (end > highest_usable_address) {
+
+        if (entry->type == LIMINE_MEMMAP_USABLE &&
+            end > highest_usable_address) {
             highest_usable_address = end;
         }
     }
@@ -269,7 +278,8 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     pmm_serial_write("NYR: PMM metadata reserved\r\n");
     next_hint = 0;
     allocator_ready = true;
-    return nyr_pmm_get_stats(&(struct nyr_pmm_stats){0});
+    pmm_serial_write("NYR: PMM initialization complete\\r\\n");
+    return true;
 }
 
 uint64_t nyr_pmm_alloc_frame(void) {
@@ -343,6 +353,7 @@ bool nyr_pmm_self_test(void) {
 
     if (first == 0 || second == 0 || third == 0 ||
         first == second || first == third || second == third ||
+        nyr_pmm_free_frame(0) || nyr_pmm_free_frame(first + 1u) ||
         (first & NYR_PAGE_MASK) != 0 ||
         (second & NYR_PAGE_MASK) != 0 ||
         (third & NYR_PAGE_MASK) != 0) {
