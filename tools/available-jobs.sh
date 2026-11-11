@@ -38,7 +38,6 @@ if [ -r /sys/fs/cgroup/cpu.max ]; then
     read -r quota period < /sys/fs/cgroup/cpu.max || true
     if [ "${quota:-max}" != max ] && [ "${period:-0}" -gt 0 ] 2>/dev/null; then
         quota_cpus=$((quota / period))
-        [ "$((quota % period))" -eq 0 ] || quota_cpus=$((quota_cpus + 1))
         [ "$quota_cpus" -gt 0 ] || quota_cpus=1
         [ "$quota_cpus" -lt "$available" ] && available=$quota_cpus
     fi
