@@ -139,7 +139,7 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
         uint64_t end;
         if (!map_entry(memory_map, i, &entry) || entry->length == 0 ||
             add_overflow_u64(entry->base, entry->length, &end)) {
-            pmm_serial_write("NYR: PMM malformed memory-map entry\\r\\n");
+            pmm_serial_write("NYR: PMM malformed memory-map entry\r\n");
             return false;
         }
 
@@ -150,7 +150,7 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
             if (!map_entry(memory_map, j, &previous) ||
                 add_overflow_u64(previous->base, previous->length, &previous_end) ||
                 (entry->base < previous_end && previous->base < end)) {
-                pmm_serial_write("NYR: PMM overlapping memory-map entries\\r\\n");
+                pmm_serial_write("NYR: PMM overlapping memory-map entries\r\n");
                 return false;
             }
         }
@@ -278,7 +278,7 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     pmm_serial_write("NYR: PMM metadata reserved\r\n");
     next_hint = 0;
     allocator_ready = true;
-    pmm_serial_write("NYR: PMM initialization complete\\r\\n");
+    pmm_serial_write("NYR: PMM initialization complete\r\n");
     return true;
 }
 
