@@ -47,7 +47,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM now supports single-page 4 KiB mapping and unmapping in the active address space, with owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings are deliberately not split. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is a verified early-kernel milestone, not yet a complete general-purpose OS. The current kernel has a single-CPU physical frame allocator and basic exception/interrupt descriptor setup. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, page-table allocation/reclamation, and local TLB invalidation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths remain single-CPU; remote TLB shootdowns require AP startup and IPI routing, neither of which is implemented yet. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 
@@ -62,17 +62,17 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 5. VFS, init process, drivers, storage and userspace.
 
 
-## Virtual memory inspection
+## Virtual memory management
 
-The VMM requests four-level paging from Limine and walks the active CR3 hierarchy through the HHDM. It supports mapping and unmapping individual 4 KiB pages in the active address space.
+The VMM requests four-level paging from Limine and walks the active CR3 hierarchy through the HHDM. It supports individual 4 KiB mappings, contiguous range mapping with rollback, unmapping with explicit ownership return, and leaf permission changes in the active address space.
 
 - Translates 4 KiB PTE mappings and 2 MiB/1 GiB huge-page mappings.
 - Calculates effective writable, user-accessible, and executable permissions by combining flags across all paging levels.
 - Rejects non-canonical virtual addresses, absent entries, unaligned roots, and reserved address bits in huge-page entries.
-- Boot self-test validates the kernel text mapping, the active stack mapping, and a PMM-allocated frame through the HHDM.
+- Boot self-test validates kernel text, the active stack, HHDM access, owned/borrowed mapping lifetimes, and a read-only/executable permission transition.
 - Host tests use synthetic page tables to verify translations, huge pages, effective permissions, and malformed mappings.
 
-It does not allocate page tables, create or remove mappings, change permissions, or perform TLB invalidation yet.
+Existing 1 GiB and 2 MiB mappings are translated but not yet split for 4 KiB edits. TLB invalidation is local (`invlpg`) only. The current kernel has no AP startup or IPI path, so page-table mutation and the PMM are single-CPU only; remote TLB shootdowns are not yet available.
 
 ## Physical memory manager
 

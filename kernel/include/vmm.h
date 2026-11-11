@@ -59,6 +59,22 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
                       uint32_t flags,
                       enum nyr_vmm_page_ownership ownership);
 
+/*
+ * Map a contiguous physical range of 4 KiB pages. Partial installation is
+ * rolled back; the caller retains ownership of frames after rollback.
+ */
+bool nyr_vmm_map_range(uint64_t hhdm_offset,
+                       uint64_t virtual_address,
+                       uint64_t physical_address,
+                       uint64_t page_count,
+                       uint32_t flags,
+                       enum nyr_vmm_page_ownership ownership);
+
+/* Change one existing 4 KiB mapping's leaf permissions; huge leaves are rejected. */
+bool nyr_vmm_protect_page(uint64_t hhdm_offset,
+                          uint64_t virtual_address,
+                          uint32_t flags);
+
 /* Remove one 4 KiB mapping and return its physical page and ownership. */
 bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
                         uint64_t virtual_address,

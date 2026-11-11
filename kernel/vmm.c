@@ -341,6 +341,108 @@ bool nyr_vmm_map_page(uint64_t hhdm_offset,
     return success;
 }
 
+
+bool nyr_vmm_map_range(uint64_t hhdm_offset,
+                       uint64_t virtual_address,
+                       uint64_t physical_address,
+                       uint64_t page_count,
+                       uint32_t flags,
+                       enum nyr_vmm_page_ownership ownership) {
+    if (page_count == 0 || page_count > UINT64_C(1048576) ||
+        !canonical_48(virtual_address) ||
+        (virtual_address & NYR_PAGE_MASK) != 0 ||
+        (physical_address & NYR_PAGE_MASK) != 0 ||
+        page_count - 1u > (UINT64_MAX - virtual_address) / NYR_PAGE_SIZE ||
+        page_count - 1u > (UINT64_MAX - physical_address) / NYR_PAGE_SIZE ||
+        !canonical_48(virtual_address + (page_count - 1u) * NYR_PAGE_SIZE) ||
+        ((physical_address + (page_count - 1u) * NYR_PAGE_SIZE) &
+         ~X86_PTE_ADDRESS) != 0) {
+        return false;
+    }
+
+    uint64_t mapped = 0;
+    for (; mapped < page_count; ++mapped) {
+        if (!nyr_vmm_map_page(hhdm_offset,
+                              virtual_address + mapped * NYR_PAGE_SIZE,
+                              physical_address + mapped * NYR_PAGE_SIZE,
+                              flags, ownership)) {
+            break;
+        }
+    }
+    if (mapped == page_count) return true;
+
+    while (mapped != 0) {
+        --mapped;
+        struct nyr_vmm_unmapped_page ignored;
+        (void)nyr_vmm_unmap_page(hhdm_offset,
+                                 virtual_address + mapped * NYR_PAGE_SIZE,
+                                 &ignored);
+    }
+    return false;
+}
+
+bool nyr_vmm_protect_page(uint64_t hhdm_offset,
+                          uint64_t virtual_address,
+                          uint32_t flags) {
+    const uint32_t allowed_flags =
+        NYR_VMM_MAP_WRITE | NYR_VMM_MAP_USER | NYR_VMM_MAP_EXECUTE;
+    if (!canonical_48(virtual_address) ||
+        (virtual_address & NYR_PAGE_MASK) != 0 ||
+        (flags & ~allowed_flags) != 0 ||
+        ((flags & NYR_VMM_MAP_WRITE) != 0 &&
+         (flags & NYR_VMM_MAP_EXECUTE) != 0)) {
+        return false;
+    }
+
+    const uint64_t irq_state = irq_save_disable();
+    volatile uint64_t *table = table_pointer(active_root(), hhdm_offset);
+    if (table == NULL) {
+        irq_restore(irq_state);
+        return false;
+    }
+    const uint16_t indices[3] = {
+        (uint16_t)((virtual_address >> 39) & 0x1ffu),
+        (uint16_t)((virtual_address >> 30) & 0x1ffu),
+        (uint16_t)((virtual_address >> 21) & 0x1ffu)
+    };
+    uint64_t entry;
+    for (unsigned int level = 0; level < 3u; ++level) {
+        if (!read_present_entry(table, indices[level], &entry) ||
+            (entry & X86_PTE_HUGE) != 0 ||
+            ((flags & NYR_VMM_MAP_WRITE) != 0 &&
+             (entry & X86_PTE_WRITABLE) == 0) ||
+            ((flags & NYR_VMM_MAP_USER) != 0 &&
+             (entry & X86_PTE_USER) == 0) ||
+            ((flags & NYR_VMM_MAP_EXECUTE) != 0 &&
+             (entry & X86_PTE_NO_EXECUTE) != 0)) {
+            irq_restore(irq_state);
+            return false;
+        }
+        table = table_pointer(entry & X86_PTE_ADDRESS, hhdm_offset);
+        if (table == NULL) {
+            irq_restore(irq_state);
+            return false;
+        }
+    }
+
+    volatile uint64_t *leaf = &table[(virtual_address >> 12) & 0x1ffu];
+    if (!read_present_entry(table,
+                            (uint16_t)((virtual_address >> 12) & 0x1ffu),
+                            &entry)) {
+        irq_restore(irq_state);
+        return false;
+    }
+    uint64_t replacement = entry &
+        ~(X86_PTE_WRITABLE | X86_PTE_USER | X86_PTE_NO_EXECUTE);
+    if ((flags & NYR_VMM_MAP_WRITE) != 0) replacement |= X86_PTE_WRITABLE;
+    if ((flags & NYR_VMM_MAP_USER) != 0) replacement |= X86_PTE_USER;
+    if ((flags & NYR_VMM_MAP_EXECUTE) == 0) replacement |= X86_PTE_NO_EXECUTE;
+    *leaf = replacement;
+    invalidate_page(virtual_address);
+    irq_restore(irq_state);
+    return true;
+}
+
 bool nyr_vmm_unmap_page(uint64_t hhdm_offset,
                         uint64_t virtual_address,
                         struct nyr_vmm_unmapped_page *unmapped) {
@@ -466,6 +568,15 @@ bool nyr_vmm_self_test(uint64_t hhdm_offset) {
         after.physical_address == owned_frame &&
         after.writable && !after.executable && !after.user_accessible;
 
+    const bool protected = nyr_vmm_protect_page(
+        hhdm_offset, test_virtual, NYR_VMM_MAP_EXECUTE);
+    const bool protection_verified =
+        protected &&
+        nyr_vmm_translate_current(hhdm_offset, test_virtual, &after) &&
+        !after.writable && after.executable && !after.user_accessible;
+    const bool permissions_restored = nyr_vmm_protect_page(
+        hhdm_offset, test_virtual, NYR_VMM_MAP_WRITE);
+
     struct nyr_vmm_unmapped_page unmapped;
     const bool removed = nyr_vmm_unmap_page(hhdm_offset, test_virtual, &unmapped);
     const bool absent = !nyr_vmm_translate_current(hhdm_offset,
@@ -474,7 +585,7 @@ bool nyr_vmm_self_test(uint64_t hhdm_offset) {
         removed && unmapped.physical_address == owned_frame &&
         unmapped.ownership == NYR_VMM_PAGE_OWNED;
     const bool freed = ownership_returned && nyr_pmm_free_frame(owned_frame);
-    if (!readback || !translated_mapping || !removed || !absent || !freed) {
+    if (!readback || !translated_mapping || !protection_verified ||\n        !permissions_restored || !removed || !absent || !freed) {
         return false;
     }
 
