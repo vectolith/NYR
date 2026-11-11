@@ -133,7 +133,15 @@ static int test_mapping_argument_validation(void) {
         fputs("host VMM test: invalid map arguments accepted\\n", stderr);
         return 1;
     }
-    if (nyr_vmm_protect_page(0, UINT64_C(0xffffc00000000000),
+    if (nyr_vmm_map_range(0, UINT64_C(0xffffc00000000000),
+                          PAGE_SIZE, 0, 0, NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_map_range(0, UINT64_C(0xffffc00000000000),
+                          PAGE_SIZE, UINT64_MAX, 0, NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_map_range(0, UINT64_C(0xffffc00000000000),
+                          PAGE_SIZE, 1,
+                          NYR_VMM_MAP_WRITE | NYR_VMM_MAP_EXECUTE,
+                          NYR_VMM_PAGE_BORROWED) ||
+        nyr_vmm_protect_page(0, UINT64_C(0xffffc00000000000),
                              NYR_VMM_MAP_WRITE | NYR_VMM_MAP_EXECUTE) ||
         nyr_vmm_protect_page(0, UINT64_C(0xffffc00000000001), 0)) {
         fputs("host VMM test: invalid protection arguments accepted\\n", stderr);

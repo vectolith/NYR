@@ -142,6 +142,12 @@ bool nyr_vmm_enable_nx(void) {
     __asm__ volatile ("wrmsr"
                       : : "c"(X86_EFER_MSR), "a"(efer_low), "d"(efer_high)
                       : "memory");
+
+    /* Enforce supervisor write protection for read-only PTEs. */
+    uint64_t cr0;
+    __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= UINT64_C(1) << 16; /* CR0.WP */
+    __asm__ volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
     return true;
 }
 
