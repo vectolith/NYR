@@ -2,65 +2,41 @@
 
 NYR is a from-scratch x86-64 operating system project.
 
-## Develop from an iPhone with GitHub Codespaces
+## Codespaces development
+The Ubuntu 24.04 Codespaces image includes GCC/binutils, Clang/LLD, NASM, CMake/Ninja, QEMU, OVMF, GDB, FAT/ISO utilities, Rust, Python and common build utilities. It records installed package versions in `/etc/nyr-toolchain-packages.txt`. Open the repository, select `codespaces-development`, then choose **Code → Codespaces → Create codespace**. Use the browser-based VS Code terminal on iPhone.
 
-The `.devcontainer` installs the current Ubuntu 24.04 development toolchain, including GCC/binutils, Clang/LLD, NASM, CMake/Ninja, QEMU, OVMF, GDB, FAT/ISO utilities, Rust, Python and common build utilities. The container upgrades the base image's security packages and records installed package versions in `/etc/nyr-toolchain-packages.txt`.
+Ubuntu package patch versions are the newest available when the image is built; Dependabot tracks the base image and GitHub Actions weekly. This is a maintained current toolchain, not a bit-for-bit frozen lockfile.
 
-Open the repository in GitHub, select the `codespaces-development` branch, then choose **Code → Codespaces → Create codespace**. The post-create command runs preflight and builds the kernel. Use the browser-based VS Code terminal on iPhone.
-
-The tool set and Ubuntu release are consistent across Codespaces. Package patch versions are the newest available from Ubuntu 24.04 repositories when the image is built; they can advance over time. Dependabot checks the container base image and GitHub Actions weekly. This is a maintained, current toolchain rather than a bit-for-bit frozen supply-chain lockfile.
-
-## Build and inspect
-
+## Build
 ```sh
 make preflight
 make clean all
-make toolchain-info
+make iso
 ```
+Outputs: `build/nyr-kernel.elf` and `build/nyr-uefi.iso`. The ISO script downloads Limine v12.9.6 and verifies the official release asset SHA-256 before use.
 
-Kernel output: `build/nyr-kernel.elf`.
-
-## QEMU testing
-
+## Boot
 ```sh
-make qemu-smoke
+make qemu-boot-smoke
 make qemu-run
 ```
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel-entry and framebuffer-initialized messages on COM1. Interactive mode attaches the serial console to the Codespaces terminal.
 
-`make qemu-smoke` verifies that QEMU can start headlessly and create a serial log. `make qemu-run` launches a UEFI disk image with no graphical display and attaches COM1 to the terminal. In Codespaces, terminal output is viewable in the browser on a phone.
+## Current boot architecture
+- Limine UEFI bootloader and Limine boot protocol.
+- Higher-half x86-64 kernel at `0xffffffff80000000`.
+- Limine base-revision and framebuffer requests.
+- Dedicated kernel stack and COM1 diagnostics.
+- 32-bpp RGB framebuffer initialization.
 
-To save serial output to a file instead:
+This is a real UEFI-to-kernel boot milestone, not yet a complete general-purpose OS. Memory management, interrupts, scheduling, storage, drivers and userspace remain future work.
 
-```sh
-NYR_QEMU_SERIAL=file make qemu-run
-```
-
-To select a disk image explicitly:
-
-```sh
-NYR_DISK_IMAGE=build/nyr-uefi.img make qemu-run
-```
-
-The kernel now initializes COM1 and emits boot diagnostics. **A full NYR boot is not yet possible:** the repository still needs its UEFI loader, ELF loader, and disk-image creation target. Until those are implemented, `qemu-smoke` tests the emulator and serial plumbing, not a successful NYR guest boot. The UEFI runner is ready for that image when the loader milestone lands.
-
-## Current kernel foundation
-
-- Freestanding x86-64 entry point and dedicated kernel stack.
-- Higher-half link address: `0xffffffff80000000`.
-- Versioned NYR boot-information structure (`NYR0`).
-- 32-bpp framebuffer fill test.
-- COM1 serial diagnostics for headless debugging.
-
-## Continuous integration and updates
-
-GitHub Actions runs preflight, compiles the kernel, verifies the ELF, and performs a headless QEMU startup/serial test on pushes and pull requests. Build artifacts and the QEMU smoke log are retained for 14 days. Dependabot checks GitHub Actions and the Codespaces base image weekly.
+## CI
+GitHub Actions builds the ELF and UEFI ISO, boots it headlessly under QEMU/OVMF, and verifies serial markers. Artifacts and logs are retained for 14 days.
 
 ## Next milestones
-
-1. UEFI loader and ELF loading.
-2. Firmware memory map + framebuffer handoff.
-3. ExitBootServices and higher-half page tables.
-4. Physical/virtual memory managers.
-5. GDT/IDT, exceptions, APIC/timers.
-6. Scheduler, processes, ring 3, syscall ABI.
-7. VFS, init process, drivers, storage and userspace.
+1. Firmware memory map and physical memory manager.
+2. GDT/IDT, exceptions, APIC and timers.
+3. Virtual memory manager and heap.
+4. Scheduler, processes, ring 3 and syscall ABI.
+5. VFS, init process, drivers, storage and userspace.
