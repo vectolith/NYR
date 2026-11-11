@@ -41,6 +41,15 @@ if [ -r /sys/fs/cgroup/cpu.max ]; then
         [ "$quota_cpus" -gt 0 ] || quota_cpus=1
         [ "$quota_cpus" -lt "$available" ] && available=$quota_cpus
     fi
+elif [ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us ] &&
+     [ -r /sys/fs/cgroup/cpu/cpu.cfs_period_us ]; then
+    quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us)
+    period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us)
+    if [ "$quota" -gt 0 ] 2>/dev/null && [ "$period" -gt 0 ] 2>/dev/null; then
+        quota_cpus=$((quota / period))
+        [ "$quota_cpus" -gt 0 ] || quota_cpus=1
+        [ "$quota_cpus" -lt "$available" ] && available=$quota_cpus
+    fi
 fi
 
 # cgroup v2 effective cpuset, then v1 cpuset fallback.
