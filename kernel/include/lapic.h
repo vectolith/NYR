@@ -22,4 +22,9 @@ bool nyr_lapic_send_tlb_flush_all(uint32_t destination_lapic_id,
                                   uint64_t spin_limit);
 /* Called by the NMI exception dispatcher; false means an unexpected NMI. */
 bool nyr_lapic_handle_nmi(void);
+
+bool nyr_lapic_send_fixed_ipi(uint32_t destination_lapic_id, uint8_t vector,
+                              uint64_t spin_limit);
+
+void nyr_lapic_send_eoi(void);
 #endif

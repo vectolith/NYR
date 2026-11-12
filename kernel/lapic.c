@@ -202,6 +202,28 @@ static bool send_nmi_ipi(uint32_t destination_lapic_id, uint64_t spin_limit) {
     return true;
 }
 
+bool nyr_lapic_send_fixed_ipi(uint32_t destination_lapic_id, uint8_t vector,
+                               uint64_t spin_limit) {
+    if (vector < 32u || spin_limit == 0u) return false;
+    if (lapic_x2apic) {
+        write_msr(X2APIC_ICR, ((uint64_t)destination_lapic_id << 32) | vector);
+        return true;
+    }
+    if (destination_lapic_id > 255u) return false;
+    for (uint64_t spin = 0; spin < spin_limit; ++spin) {
+        if ((xapic_read(XAPIC_ICR_LOW) & XAPIC_DELIVERY_PENDING) == 0) break;
+        if (spin + 1u == spin_limit) return false;
+        __asm__ volatile ("pause" ::: "memory");
+    }
+    xapic_write(XAPIC_ICR_HIGH, destination_lapic_id << 24);
+    xapic_write(XAPIC_ICR_LOW, vector);
+    return true;
+}
+
+void nyr_lapic_send_eoi(void) {
+    lapic_write_register(XAPIC_EOI, X2APIC_EOI, 0);
+}
+
 static bool canonical_48(uint64_t address) {
     const uint64_t upper = address >> 48;
     const bool sign = ((address >> 47) & 1u) != 0;

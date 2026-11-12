@@ -28,7 +28,7 @@ static uint64_t online_cpus;
 static uint64_t failed_cpus;
 
 static __attribute__((noreturn)) void ap_park_forever(void) {
-    __asm__ volatile ("cli" ::: "memory");
+    __asm__ volatile ("sti" ::: "memory");
     for (;;) __asm__ volatile ("hlt" ::: "memory");
 }
 
@@ -195,4 +195,24 @@ uint64_t nyr_smp_online_count(void) {
 }
 uint64_t nyr_smp_failed_count(void) {
     return __atomic_load_n(&failed_cpus, __ATOMIC_ACQUIRE);
+}
+
+bool nyr_smp_maskable_ipi_self_test(uint64_t spin_limit) {
+    const uint32_t self = nyr_cpu_local_lapic_id();
+    uint32_t target = 0;
+    const uint64_t count = __atomic_load_n(&configured_cpu_count, __ATOMIC_ACQUIRE);
+    for (uint64_t i = 0; i < count; ++i) {
+        if (cpu_state[i].lapic_id != self) {
+            target = cpu_state[i].lapic_id;
+            break;
+        }
+    }
+    if (target == 0 || spin_limit == 0) return false;
+    const uint32_t before = nyr_interrupts_maskable_ipi_total();
+    if (!nyr_lapic_send_fixed_ipi(target, 64u, spin_limit)) return false;
+    for (uint64_t spin = 0; spin < spin_limit; ++spin) {
+        if (nyr_interrupts_maskable_ipi_total() > before) return true;
+        __asm__ volatile ("pause" ::: "memory");
+    }
+    return false;
 }

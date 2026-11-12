@@ -596,6 +596,12 @@ bool nyr_vmm_smp_self_test(uint64_t hhdm_offset) {
     return mapped && writable && absent && freed;
 }
 
+uint64_t nyr_vmm_current_root_physical(void) {
+    uint64_t cr3;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3) : : "memory");
+    return cr3 & ~UINT64_C(0xfff);
+}
+
 bool nyr_vmm_self_test(uint64_t hhdm_offset) {
     struct nyr_vmm_translation code_translation;
     struct nyr_vmm_translation stack_translation;

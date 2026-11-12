@@ -130,6 +130,8 @@ nyr_isr_common:
     iretq
 .size nyr_isr_common, . - nyr_isr_common
 
+ISR_NOERR 64
+
 .section .rodata
 .balign 8
 .global nyr_exception_stub_table

@@ -241,11 +241,16 @@ void nyr_kernel_main(void) {
             halt_forever();
         }
         nyr_serial_write("NYR: VMM/TLB benchmark completed\r\n");
-        nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
+            nyr_serial_write("NYR: NMI IPIs acknowledged by all APs\r\n");
+            if (!nyr_smp_maskable_ipi_self_test(UINT64_C(5000000))) {
+                nyr_serial_write("NYR: maskable IPI self-test failed\r\n");
+                halt_forever();
+            }
+            nyr_serial_write("NYR: maskable IPI delivered and acknowledged by an AP\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
     }
-    nyr_serial_write("NYR: SMP CPUs parked with interrupts disabled; scheduler not enabled\r\n");
+        nyr_serial_write("NYR: SMP CPUs parked with interrupts enabled; scheduler not enabled\r\n");
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }

@@ -17,7 +17,7 @@ timeout 15s qemu-system-x86_64 -machine q35 -accel tcg,thread=multi -smp "$NYR_C
 STATUS=$?
 set -e
 cat "$LOG" || true
-for marker in "NYR: kernel entered" "NYR: SMP topology discovered CPUs $NYR_CPUS" "NYR: BSP GDT, TSS, IDT and breakpoint self-test passed" "NYR: framebuffer initialized" "NYR: PMM self-test passed" "NYR: virtual memory mapping, ownership, and TLB self-tests passed" "NYR: local APIC initialized; BSP NMI self-test passed" "NYR: SMP application processors online $NYR_CPUS" "NYR: remote TLB shootdown self-test passed" "NYR: VMM/TLB benchmark completed" "NYR: NMI IPIs acknowledged by all APs" "NYR: SMP CPUs parked with interrupts disabled; scheduler not enabled" "NYR: boot milestone reached; idle halt loop"; do
+for marker in "NYR: kernel entered" "NYR: SMP topology discovered CPUs $NYR_CPUS" "NYR: BSP GDT, TSS, IDT and breakpoint self-test passed" "NYR: framebuffer initialized" "NYR: PMM self-test passed" "NYR: virtual memory mapping, ownership, and TLB self-tests passed" "NYR: local APIC initialized; BSP NMI self-test passed" "NYR: SMP application processors online $NYR_CPUS" "NYR: remote TLB shootdown self-test passed" "NYR: VMM/TLB benchmark completed" "NYR: NMI IPIs acknowledged by all APs" "NYR: maskable IPI delivered and acknowledged by an AP" "NYR: SMP CPUs parked with interrupts enabled; scheduler not enabled" "NYR: boot milestone reached; idle halt loop"; do
   grep -Fq "$marker" "$LOG" || {
     echo "Missing boot marker: $marker (QEMU status $STATUS)" >&2
     exit 1

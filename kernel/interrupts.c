@@ -67,6 +67,10 @@ static bool idt_ready;
 extern char stack_top[];
 extern void (*nyr_exception_stub_table[NYR_EXCEPTION_COUNT])(void);
 extern void nyr_isr255(void);
+extern void nyr_isr64(void);
+
+#define NYR_IPI_VECTOR 64u
+static uint32_t maskable_ipi_total;
 extern void nyr_load_gdt(const struct nyr_gdt_pointer *pointer);
 extern void nyr_load_task_register(void);
 extern void nyr_load_idt(const struct nyr_idt_pointer *pointer);
@@ -106,6 +110,7 @@ void nyr_interrupts_init(void) {
                      vector == 8u ? 1u : (vector == 2u ? 2u : 0u));
     }
     set_idt_gate(255u, nyr_isr255, 0u);
+    set_idt_gate(NYR_IPI_VECTOR, nyr_isr64, 0u);
     idt_ready = true;
 }
 
@@ -182,7 +187,12 @@ static void exception_halt(void) {
 void nyr_exception_dispatch(struct nyr_exception_frame *frame) {
     if (frame->vector == 255u) return;
     if (frame->vector == 2u && nyr_lapic_handle_nmi()) return;
-    if (frame->vector == 3u) {
+        if (frame->vector == NYR_IPI_VECTOR) {
+            __atomic_add_fetch(&maskable_ipi_total, 1u, __ATOMIC_RELEASE);
+            nyr_lapic_send_eoi();
+            return;
+        }
+        if (frame->vector == 3u) {
         __atomic_add_fetch(&breakpoint_count, 1u, __ATOMIC_RELAXED);
         return;
     }
@@ -201,6 +211,10 @@ void nyr_exception_dispatch(struct nyr_exception_frame *frame) {
     nyr_serial_write("\r\n");
     exception_halt();
 }
+uint32_t nyr_interrupts_maskable_ipi_total(void) {
+    return __atomic_load_n(&maskable_ipi_total, __ATOMIC_ACQUIRE);
+}
+
 bool nyr_interrupts_self_test(void) {
     const uint64_t before = __atomic_load_n(&breakpoint_count, __ATOMIC_RELAXED);
     __asm__ volatile ("int3" : : : "memory");

@@ -26,6 +26,16 @@ bool nyr_lapic_init_cpu(uint32_t lapic_id) { (void)lapic_id; return true; }
 bool nyr_lapic_send_nmi(uint32_t lapic_id, uint32_t cpu_index, uint64_t spin_limit) {
     (void)lapic_id; (void)cpu_index; (void)spin_limit; return true;
 }
+static uint32_t host_maskable_ipi_total;
+bool nyr_lapic_send_fixed_ipi(uint32_t lapic_id, uint8_t vector, uint64_t spin_limit) {
+    (void)lapic_id;
+    if (vector < 32u || spin_limit == 0) return false;
+    __atomic_add_fetch(&host_maskable_ipi_total, 1u, __ATOMIC_RELAXED);
+    return true;
+}
+uint32_t nyr_interrupts_maskable_ipi_total(void) {
+    return __atomic_load_n(&host_maskable_ipi_total, __ATOMIC_RELAXED);
+}
 bool nyr_lapic_send_tlb_invalidate(uint32_t lapic_id, uint32_t cpu_index,
                                    uint64_t virtual_address, uint64_t spin_limit) {
     (void)lapic_id; (void)cpu_index; (void)virtual_address; (void)spin_limit;

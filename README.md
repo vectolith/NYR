@@ -23,7 +23,7 @@ Open the repository, select `codespaces-development`, then choose **Code → Cod
 - CI sets four build jobs and boots QEMU with four virtual CPUs.
 - QEMU uses multi-threaded TCG (`-accel tcg,thread=multi`) so guest vCPUs can execute on separate host threads when host capacity permits.
 - Set `NYR_CPUS` to change the QEMU virtual CPU count; it defaults to `4`.
-- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The kernel now validates the CPU inventory supplied by Limine's x86-64 MP protocol, including unique processor/LAPIC IDs and BSP identification. It starts APs through Limine's protocol-defined entry path after installing private per-CPU descriptor state and initializing local APICs. APs acknowledge NMI IPIs on dedicated IST stacks, then remain halted with maskable interrupts disabled. Maskable IPI routing, external interrupt handling, and scheduler handoff remain gated. Remote TLB invalidation currently uses bounded NMI IPIs.
+- Four QEMU vCPUs expose a four-CPU machine to the guest but do not mean NYR has SMP support. The kernel now validates the CPU inventory supplied by Limine's x86-64 MP protocol, including unique processor/LAPIC IDs and BSP identification. It starts APs through Limine's protocol-defined entry path after installing private per-CPU descriptor state and initializing local APICs. APs acknowledge NMI IPIs on dedicated IST stacks, then park with maskable interrupts enabled and acknowledge fixed-vector IPIs. External interrupt handling and scheduler handoff remain gated. Remote TLB invalidation currently uses bounded NMI IPIs.
 
 ## Build
 
@@ -43,7 +43,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership tests, AP startup, BSP/AP NMI delivery, remote TLB shootdown self-test, and the final boot milestone on COM1. CI also runs host-side PMM, VMM, and SMP CPU-inventory validation tests.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership tests, AP startup, BSP/AP NMI delivery, maskable IPI delivery to an AP, remote TLB shootdown self-test, and the final boot milestone on COM1. CI also runs host-side PMM, VMM, and SMP CPU-inventory validation tests.
 
 ## Current boot architecture
 
@@ -56,7 +56,7 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 
-This is an early-kernel milestone, not yet a complete general-purpose OS. The kernel has per-CPU descriptor state, local APIC initialization, and tested NMI IPI delivery to parked APs. APs do not yet execute scheduler work or accept maskable interrupts. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, local invalidation, and NMI-based remote TLB invalidation with full CR3 flush before page-table reclamation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths use SMP spinlocks. VMM 4 KiB map, protect, and unmap operations perform local invalidation plus bounded NMI-based remote TLB invalidation on online APs. Before reclaiming empty page-table pages, every CPU reloads CR3 to flush paging-structure caches; a failed acknowledgement is fail-stop. APs remain parked with maskable interrupts disabled. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
+This is an early-kernel milestone, not yet a complete general-purpose OS. The kernel has per-CPU descriptor state, local APIC initialization, and tested NMI IPI delivery to parked APs. APs do not yet execute scheduler work. The VMM supports 4 KiB mapping/unmapping, contiguous range mapping with rollback, leaf permission changes, owned/borrowed page lifetime tracking, W^X enforcement, NX enablement, CR0.WP, page-table allocation/reclamation, local invalidation, and NMI-based remote TLB invalidation with full CR3 flush before page-table reclamation. Existing huge-page mappings can be translated but are not yet split for 4 KiB edits. The PMM and page-table mutation paths use SMP spinlocks. VMM 4 KiB map, protect, and unmap operations perform local invalidation plus bounded NMI-based remote TLB invalidation on online APs. Before reclaiming empty page-table pages, every CPU reloads CR3 to flush paging-structure caches; a failed acknowledgement is fail-stop. APs remain parked with maskable interrupts disabled. Interrupt controllers and external IRQ routing, scheduling, storage, drivers and userspace remain future work.
 
 ## CI validation
 

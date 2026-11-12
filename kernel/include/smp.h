@@ -22,4 +22,6 @@ bool nyr_smp_tlb_shootdown(uint64_t virtual_address);
 bool nyr_smp_tlb_flush_all(void);
 uint64_t nyr_smp_online_count(void);
 uint64_t nyr_smp_failed_count(void);
+/* Deliver a maskable fixed IPI to an online AP and wait for its handler. */
+bool nyr_smp_maskable_ipi_self_test(uint64_t spin_limit);
 #endif
