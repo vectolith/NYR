@@ -43,7 +43,7 @@ make qemu-boot-smoke
 make qemu-run
 ```
 
-The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership tests, AP startup, BSP/AP NMI delivery, maskable IPI delivery to an AP, remote TLB shootdown self-test, and the final boot milestone on COM1. CI also runs host-side PMM, VMM, and SMP CPU-inventory validation tests.
+The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, interrupt self-test, framebuffer initialization, PMM self-test, VMM mapping/ownership tests, AP startup, BSP/AP NMI delivery, maskable IPI delivery to an AP, remote TLB shootdown self-test, legacy PIC remap/mask verification, PIT-calibrated local APIC timer setup, a delivered periodic timer interrupt, and the final boot milestone on COM1. CI also runs host-side PMM, VMM, and SMP CPU-inventory validation tests.
 
 ## Current boot architecture
 
@@ -65,7 +65,7 @@ GitHub Actions builds the ELF and UEFI ISO, checks ELF load permissions and ISO 
 ## Next milestones
 
 1. Maskable IPI vectors and normal interrupt delivery; NMI-based remote TLB invalidation is implemented and tested.
-2. IOAPIC/legacy PIC routing, interrupt masking, and timer calibration.
+2. IOAPIC routing and external IRQ delivery (legacy PIC quiesce and APIC timer calibration are implemented).
 3. SMP scheduler handoff and per-CPU run queues.
 4. Processes, ring 3 and syscall ABI.
 5. VFS, init process, drivers, storage and userspace.

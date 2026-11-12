@@ -33,6 +33,10 @@ build/lapic.o: kernel/lapic.c kernel/include/lapic.h kernel/include/vmm.h kernel
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
+build/timer.o: kernel/timer.c kernel/include/timer.h kernel/include/lapic.h kernel/include/interrupts.h kernel/include/serial.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
 build/lock.o: kernel/lock.c kernel/include/lock.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
@@ -41,7 +45,7 @@ build/serial.o: kernel/serial.c kernel/include/serial.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
-build/interrupts.o: kernel/interrupts.c kernel/include/interrupts.h kernel/include/serial.h kernel/include/lapic.h
+build/interrupts.o: kernel/interrupts.c kernel/include/interrupts.h kernel/include/serial.h kernel/include/lapic.h kernel/include/timer.h
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
 
@@ -49,8 +53,8 @@ build/interrupts_asm.o: kernel/interrupts.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o -o $@
+build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o kernel/linker.ld
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o -o $@
 
 # GCC/Clang emit these alongside objects; missing files are normal on clean builds.
 -include $(wildcard build/*.d)

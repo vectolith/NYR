@@ -26,5 +26,12 @@ bool nyr_lapic_handle_nmi(void);
 bool nyr_lapic_send_fixed_ipi(uint32_t destination_lapic_id, uint8_t vector,
                               uint64_t spin_limit);
 
+/* Local APIC timer control. divide_code follows the architectural encoding
+ * (0b0011 = divide by 16). */
+bool nyr_lapic_timer_start_one_shot(uint32_t initial_count, uint8_t divide_code);
+bool nyr_lapic_timer_start_periodic(uint32_t count, uint8_t vector);
+void nyr_lapic_timer_stop(void);
+uint32_t nyr_lapic_timer_current(void);
+
 void nyr_lapic_send_eoi(void);
 #endif

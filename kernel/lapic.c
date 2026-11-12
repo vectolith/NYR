@@ -1,4 +1,5 @@
 #include "include/lapic.h"
+#include "include/timer.h"
 #include "include/interrupts.h"
 #include "include/vmm.h"
 
@@ -218,6 +219,43 @@ bool nyr_lapic_send_fixed_ipi(uint32_t destination_lapic_id, uint8_t vector,
     xapic_write(XAPIC_ICR_HIGH, destination_lapic_id << 24);
     xapic_write(XAPIC_ICR_LOW, vector);
     return true;
+}
+
+#define XAPIC_TIMER_DIVIDE 0x3e0u
+#define XAPIC_TIMER_INITIAL 0x380u
+#define XAPIC_TIMER_CURRENT 0x390u
+#define X2APIC_TIMER_INITIAL UINT32_C(0x838)
+#define X2APIC_TIMER_CURRENT UINT32_C(0x839)
+#define X2APIC_TIMER_DIVIDE UINT32_C(0x83e)
+
+bool nyr_lapic_timer_start_one_shot(uint32_t initial_count, uint8_t divide_code) {
+    if (!lapic_prepared) return false;
+    lapic_write_register(XAPIC_TIMER_DIVIDE, X2APIC_TIMER_DIVIDE, divide_code & 0xbu);
+    /* One-shot delivery: timer mode bits 17:18 clear, unmasked, vector in 7:0. */
+    lapic_write_register(XAPIC_LVT_TIMER, X2APIC_LVT_TIMER, (uint64_t)NYR_TIMER_VECTOR);
+    lapic_write_register(XAPIC_TIMER_INITIAL, X2APIC_TIMER_INITIAL, initial_count);
+    return true;
+}
+
+bool nyr_lapic_timer_start_periodic(uint32_t count, uint8_t vector) {
+    if (!lapic_prepared || count == 0u) return false;
+    lapic_write_register(XAPIC_TIMER_DIVIDE, X2APIC_TIMER_DIVIDE, 0x03u);
+    /* Periodic delivery: timer mode bits 17:18 = 0b01. */
+    lapic_write_register(XAPIC_LVT_TIMER, X2APIC_LVT_TIMER,
+                         (uint64_t)vector | (UINT64_C(1) << 17));
+    lapic_write_register(XAPIC_TIMER_INITIAL, X2APIC_TIMER_INITIAL, count);
+    return true;
+}
+
+void nyr_lapic_timer_stop(void) {
+    if (!lapic_prepared) return;
+    lapic_write_register(XAPIC_TIMER_INITIAL, X2APIC_TIMER_INITIAL, 0);
+    lapic_write_register(XAPIC_LVT_TIMER, X2APIC_LVT_TIMER, UINT64_C(1) << 16);
+}
+
+uint32_t nyr_lapic_timer_current(void) {
+    if (!lapic_prepared) return 0;
+    return (uint32_t)lapic_read_register(XAPIC_TIMER_CURRENT, X2APIC_TIMER_CURRENT);
 }
 
 void nyr_lapic_send_eoi(void) {

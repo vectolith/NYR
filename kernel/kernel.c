@@ -7,6 +7,7 @@
 #include "include/vmm.h"
 #include "include/smp.h"
 #include "include/lapic.h"
+#include "include/timer.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -246,7 +247,14 @@ void nyr_kernel_main(void) {
                 nyr_serial_write("NYR: maskable IPI self-test failed\r\n");
                 halt_forever();
             }
-            nyr_serial_write("NYR: maskable IPI delivered and acknowledged by an AP\r\n");
+                nyr_serial_write("NYR: maskable IPI delivered and acknowledged by an AP\r\n");
+                uint32_t ticks_per_ms = 0;
+                if (!nyr_timer_init(&ticks_per_ms)) {
+                    nyr_serial_write("NYR: PIC quiesce / APIC timer calibration failed\r\n");
+                    halt_forever();
+                }
+                serial_line("NYR: legacy PICs remapped and masked; APIC timer ticks/ms ", ticks_per_ms);
+                nyr_serial_write("NYR: periodic timer interrupt delivered\r\n");
     } else {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
     }

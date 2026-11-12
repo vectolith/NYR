@@ -131,6 +131,7 @@ nyr_isr_common:
 .size nyr_isr_common, . - nyr_isr_common
 
 ISR_NOERR 64
+ISR_NOERR 65
 
 .section .rodata
 .balign 8
