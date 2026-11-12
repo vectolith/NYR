@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "../../kernel/include/lock.h"
