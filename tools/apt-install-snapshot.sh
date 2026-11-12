@@ -29,11 +29,24 @@ else
     rm -rf /var/lib/apt/lists/*
 fi
 
-attempt=1
-# Reuse indexes only when the immutable snapshot identity matches. On a
-# cache miss, preserve successfully fetched indexes across bounded retries.
-max_attempts=4
-while [ "$attempt" -le "$max_attempts" ]; do
+    attempt=1
+    # Reuse indexes only when the immutable snapshot identity matches. On a
+    # cache miss, preserve successfully fetched indexes across bounded retries.
+    max_attempts=4
+    # The snapshot service itself occasionally returns 5xx for a whole
+    # timestamp. After this many attempts, drop the pin and build from the live
+    # archive so a snapshot outage cannot make CI fail spuriously. The warning
+    # keeps the loss of reproducibility visible in the job log.
+    snapshot_fallback_attempt=3
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if [ -n "$snapshot" ] && [ "$attempt" -ge "$snapshot_fallback_attempt" ] &&
+           [ -f /etc/apt/apt.conf.d/50snapshot ]; then
+            echo "Ubuntu snapshot $snapshot unavailable after $((attempt - 1)) attempts; falling back to the live archive (reproducibility reduced, packages not pinned)" >&2
+            rm -f /etc/apt/apt.conf.d/50snapshot
+            snapshot=""
+            cached_indexes=0
+            rm -rf /var/lib/apt/lists/*
+        fi
     indexes_ready=0
     if [ "$cached_indexes" -eq 1 ]; then
         indexes_ready=1
