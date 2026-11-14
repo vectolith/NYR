@@ -1,0 +1,88 @@
+name: NYR kernel build and UEFI boot checks
+on:
+  push:
+    branches: [main, codespaces-development, import/nyr-bundle]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nyr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-qemu:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724
+      options: --user root
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Detect available CPU capacity
+        run: |
+          JOBS="$(tools/available-jobs.sh 4)"
+          echo "NYR_JOBS=$JOBS" >> "$GITHUB_ENV"
+          echo "NYR_CPUS=$JOBS" >> "$GITHUB_ENV"
+          echo "Using $JOBS parallel build jobs and QEMU vCPUs"
+      - name: Configure immutable Ubuntu package snapshot
+        run: |
+          . ./toolchain.lock
+          printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+      - name: Install pinned build and emulator dependencies
+        run: |
+          tools/apt-install-snapshot.sh build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file
+      - name: Record tool versions
+        run: |
+          cc --version | head -n 1
+          ld --version | head -n 1
+          qemu-system-x86_64 --version | head -n 1
+          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
+      - run: make preflight
+      - name: Run host-side memory manager tests
+        run: make -j"$NYR_JOBS" test-host
+      - name: Measure clean and incremental kernel builds
+        run: |
+          make clean
+          mkdir -p build
+          echo "parallel_jobs=$NYR_JOBS" > build/build-timings.txt
+          /usr/bin/time -f 'clean_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          touch kernel/include/serial.h
+          /usr/bin/time -f 'header_incremental_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          touch kernel/serial.c
+          /usr/bin/time -f 'single_source_incremental_build_seconds=%e' -o build/build-timings.txt -a make -j"$NYR_JOBS" all
+          cat build/build-timings.txt
+      - name: Build UEFI ISO
+        run: make -j"$NYR_JOBS" iso
+      - name: Verify ELF and ISO artifacts
+        run: |
+          file build/nyr-kernel.elf build/nyr-uefi.iso
+          readelf -h build/nyr-kernel.elf
+          readelf -lW build/nyr-kernel.elf
+          readelf -SW build/nyr-kernel.elf | grep -F '.limine_requests'
+          if readelf -lW build/nyr-kernel.elf | grep -E 'LOAD.*RWE'; then
+            echo 'Unexpected writable+executable ELF load segment' >&2
+            exit 1
+          fi
+          xorriso -indev build/nyr-uefi.iso -toc
+      - name: Boot UEFI ISO and verify serial output
+        run: make qemu-boot-smoke
+      - name: Upload kernel, ISO, boot log and build timings
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: nyr-uefi-build-and-boot-logs
+          path: |
+            build/nyr-kernel.elf
+            build/nyr-uefi.iso
+            build/qemu-boot-serial.log
+            build/build-timings.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  devcontainer-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Build the Codespaces development image
+        run: docker build --pull --file .devcontainer/Dockerfile --tag nyr-codespaces:ci .
