@@ -133,6 +133,43 @@ nyr_isr_common:
 ISR_NOERR 64
 ISR_NOERR 65
 
+.global nyr_switch_context
+.type nyr_switch_context, @function
+/* void nyr_switch_context(uint64_t *prev_rsp, uint64_t next_rsp); */
+nyr_switch_context:
+    pushfq
+    pushq %rbx
+    pushq %rbp
+    pushq %r12
+    pushq %r13
+    pushq %r14
+    pushq %r15
+    movq %rsp, (%rdi)
+    movq %rsi, %rsp
+    popq %r15
+    popq %r14
+    popq %r13
+    popq %r12
+    popq %rbp
+    popq %rbx
+    popfq
+    ret
+.size nyr_switch_context, . - nyr_switch_context
+
+.global nyr_task_starter
+.type nyr_task_starter, @function
+/* Entry trampoline for newly spawned tasks */
+nyr_task_starter:
+    /* r12 contains entry function pointer, r13 contains arg */
+    movq %r13, %rdi
+    callq *%r12
+    /* If entry returns, call nyr_task_exit */
+    callq nyr_task_exit
+1:  cli
+    hlt
+    jmp 1b
+.size nyr_task_starter, . - nyr_task_starter
+
 .section .rodata
 .balign 8
 .global nyr_exception_stub_table

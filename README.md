@@ -52,7 +52,9 @@ The smoke test boots the UEFI ISO under OVMF/QEMU and requires kernel entry, int
 - Higher-half x86-64 kernel at `0xffffffff80000000`.
 - Separate ELF load segments for requests, executable text, read-only data, and writable data.
 - Dedicated kernel stack and COM1 diagnostics.
-- 32-bpp RGB framebuffer initialization.
+- 32-bpp RGB framebuffer initialization and embedded 8x16 bitmap font console (`nyr_console`).
+- Dynamic kernel heap allocator (`kmalloc`, `kzalloc`, `kfree`, `krealloc`) with power-of-two slab bins (32B to 2048B) and direct page frame fallback.
+- Cooperative task scheduler foundation (`nyr_task_create`, `nyr_sched_yield`, `nyr_switch_context`) and verified thread context switching.
 - Explicit four-level x86-64 paging request and a page-table walker for 4 KiB, 2 MiB, and 1 GiB mappings plus active-address-space 4 KiB mapping and unmapping.
 - Effective writable, user-accessible, and executable permission calculation across all page-table levels.
 

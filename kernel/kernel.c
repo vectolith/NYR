@@ -8,6 +8,9 @@
 #include "include/smp.h"
 #include "include/lapic.h"
 #include "include/timer.h"
+#include "include/heap.h"
+#include "include/console.h"
+#include "include/sched.h"
 
 #define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
 #define LIMINE_MARKER __attribute__((used))
@@ -142,7 +145,12 @@ void nyr_kernel_main(void) {
             fb->memory_model == LIMINE_FRAMEBUFFER_RGB &&
             fb->pitch >= fb->width * sizeof(uint32_t)) {
             framebuffer_fill(fb, 0x00101824);
+            nyr_console_init((void *)fb->address, fb->width, fb->height, fb->pitch);
             nyr_serial_write("NYR: framebuffer initialized\r\n");
+            nyr_console_set_colors(NYR_COLOR_FG_CYAN, NYR_COLOR_BG_DARK_NAVY);
+            nyr_console_write("NYR Operating System (never) - x86-64 Kernel Boot\r\n");
+            nyr_console_set_colors(NYR_COLOR_FG_WHITE, NYR_COLOR_BG_DARK_NAVY);
+            nyr_console_write("--------------------------------------------------\r\n");
         } else {
             nyr_serial_write("NYR: framebuffer format unsupported\r\n");
         }
@@ -209,6 +217,15 @@ void nyr_kernel_main(void) {
     serial_line("NYR: PMM free average TSC ticks ",
                 (benchmark_end - benchmark_start) / PMM_BENCH_FRAMES);
 
+    nyr_heap_init(hhdm->offset);
+    if (!nyr_heap_self_test()) {
+        nyr_serial_write("NYR: heap allocator self-test failed\r\n");
+        halt_forever();
+    }
+    nyr_serial_write("NYR: heap allocator initialized; slab and buddy self-tests passed\r\n");
+    serial_line("NYR: heap active allocations ", nyr_heap_allocation_count());
+    serial_line("NYR: heap allocated bytes ", nyr_heap_total_allocated());
+
     if (!nyr_vmm_enable_nx()) {
         nyr_serial_write("NYR: CPU NX support unavailable\r\n");
         halt_forever();
@@ -259,6 +276,18 @@ void nyr_kernel_main(void) {
         nyr_serial_write("NYR: SMP AP startup skipped; no MP response\r\n");
     }
         nyr_serial_write("NYR: SMP CPUs parked with interrupts enabled; scheduler not enabled\r\n");
+        nyr_sched_init();
+        if (!nyr_sched_self_test()) {
+            nyr_serial_write("NYR: cooperative scheduler self-test failed\r\n");
+            halt_forever();
+        }
+        nyr_serial_write("NYR: cooperative scheduler initialized; context switch self-test passed\r\n");
+        serial_line("NYR: active task count ", nyr_sched_task_count());
+        if (nyr_console_is_ready()) {
+            nyr_console_set_colors(NYR_COLOR_FG_GREEN, NYR_COLOR_BG_DARK_NAVY);
+            nyr_console_write("NYR: kernel boot milestones completed successfully.\r\n");
+            nyr_console_set_colors(NYR_COLOR_FG_WHITE, NYR_COLOR_BG_DARK_NAVY);
+        }
     nyr_serial_write("NYR: boot milestone reached; idle halt loop\r\n");
     halt_forever();
 }

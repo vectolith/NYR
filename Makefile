@@ -53,13 +53,28 @@ build/interrupts_asm.o: kernel/interrupts.S
 	mkdir -p build
 	$(RUN_WITH_TOOLS) $(CC) -ffreestanding -m64 -mno-red-zone -c $< -o $@
 
-build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o kernel/linker.ld
-	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o -o $@
+build/heap.o: kernel/heap.c kernel/include/heap.h kernel/include/lock.h kernel/include/memory.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/console.o: kernel/console.c kernel/include/console.h kernel/include/lock.h kernel/include/serial.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/sched.o: kernel/sched.c kernel/include/sched.h kernel/include/heap.h kernel/include/lock.h kernel/include/serial.h
+	mkdir -p build
+	$(RUN_WITH_TOOLS) $(CC) $(CFLAGS) -c $< -o $@
+
+build/nyr-kernel.elf: build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o build/heap.o build/console.o build/sched.o kernel/linker.ld
+	$(RUN_WITH_TOOLS) $(LD) $(LDFLAGS) build/entry.o build/kernel.o build/memory.o build/vmm.o build/smp.o build/serial.o build/interrupts.o build/interrupts_asm.o build/lapic.o build/lock.o build/timer.o build/heap.o build/console.o build/sched.o -o $@
 
 # GCC/Clang emit these alongside objects; missing files are normal on clean builds.
 -include $(wildcard build/*.d)
 
-test-host: test-pmm-host test-vmm-host test-smp-host test-lock-host
+test-host: test-pmm-host test-vmm-host test-smp-host test-lock-host test-heap-host
+
+test-heap-host:
+	@sh tools/test-heap-host.sh
 
 test-pmm-host:
 	@sh tools/test-pmm-host.sh
