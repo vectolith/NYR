@@ -17,7 +17,7 @@ jobs:
       options: --user root
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Detect available CPU capacity
         run: |
           JOBS="$(tools/available-jobs.sh 4)"
@@ -83,6 +83,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Build the Codespaces development image
         run: docker build --pull --file .devcontainer/Dockerfile --tag nyr-codespaces:ci .
