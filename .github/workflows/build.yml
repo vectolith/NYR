@@ -68,7 +68,7 @@ jobs:
         run: make qemu-boot-smoke
       - name: Upload kernel, ISO, boot log and build timings
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: nyr-uefi-build-and-boot-logs
           path: |
