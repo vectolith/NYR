@@ -30,13 +30,13 @@ jobs:
           printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
       - name: Install pinned build and emulator dependencies
         run: |
-          tools/apt-install-snapshot.sh build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file
+          tools/apt-install-snapshot.sh build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file time
       - name: Record tool versions
         run: |
           cc --version | head -n 1
           ld --version | head -n 1
           qemu-system-x86_64 --version | head -n 1
-          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file
+          dpkg-query -W -f='${binary:Package}=${Version}\n' build-essential gcc-13 binutils qemu-system-x86 ovmf xorriso file time
       - run: make preflight
       - name: Run host-side memory manager tests
         run: make -j"$NYR_JOBS" test-host
