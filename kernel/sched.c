@@ -39,18 +39,18 @@ nyr_task_t *nyr_task_create(const char *name, nyr_task_entry_t entry, void *arg)
         return NULL;
     }
 
-    nyr_spinlock_acquire(&sched_lock);
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
 
     nyr_task_t *task = (nyr_task_t *)nyr_kmalloc(sizeof(nyr_task_t));
     if (task == NULL) {
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return NULL;
     }
 
     void *stack = nyr_kmalloc(NYR_TASK_STACK_SIZE);
     if (stack == NULL) {
         nyr_kfree(task);
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return NULL;
     }
 
@@ -87,7 +87,7 @@ nyr_task_t *nyr_task_create(const char *name, nyr_task_entry_t entry, void *arg)
     task->next = task_list;
     task_list = task;
 
-    nyr_spinlock_release(&sched_lock);
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
     return task;
 }
 
@@ -111,7 +111,7 @@ void nyr_sched_yield(void) {
 
     if (next == prev || next->state != NYR_TASK_READY) {
         /* No other ready task found */
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return;
     }
 
@@ -121,7 +121,7 @@ void nyr_sched_yield(void) {
     next->state = NYR_TASK_RUNNING;
     current_task = next;
 
-    nyr_spinlock_release(&sched_lock);
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
 
     /* Perform the context switch */
     nyr_switch_context(&prev->rsp, next->rsp);
