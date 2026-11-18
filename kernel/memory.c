@@ -256,6 +256,87 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
     return true;
 }
 
+uint64_t nyr_pmm_alloc_contiguous(uint64_t page_count) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    if (!allocator_ready || page_count == 0 || page_count > free_frames ||
+        page_count > frame_count) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return 0;
+    }
+
+    uint64_t run_start = 0;
+    uint64_t run_length = 0;
+    for (uint64_t frame = 0; frame < frame_count; ++frame) {
+        if (frame_state_get(frame) == FRAME_STATE_FREE) {
+            if (run_length == 0) {
+                run_start = frame;
+            }
+            ++run_length;
+            if (run_length == page_count) {
+                for (uint64_t i = 0; i < page_count; ++i) {
+                    frame_state_set(run_start + i, FRAME_STATE_ALLOCATED);
+                }
+                free_frames -= page_count;
+                allocated_frames += page_count;
+                next_hint = run_start + page_count;
+                if (next_hint >= frame_count) {
+                    next_hint = 0;
+                }
+                const uint64_t physical = run_start * NYR_PAGE_SIZE;
+                nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+                return physical;
+            }
+        } else {
+            run_length = 0;
+        }
+    }
+
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return 0;
+}
+
+bool nyr_pmm_free_contiguous(uint64_t physical_address, uint64_t page_count) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    if (!allocator_ready || physical_address == 0 ||
+        (physical_address & NYR_PAGE_MASK) != 0 || page_count == 0) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    const uint64_t first_frame = physical_address / NYR_PAGE_SIZE;
+    if (first_frame >= frame_count || page_count > frame_count - first_frame) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    const uint64_t metadata_first = metadata_physical / NYR_PAGE_SIZE;
+    const uint64_t metadata_end = metadata_first + metadata_pages;
+    const uint64_t allocation_end = first_frame + page_count;
+    if (first_frame < metadata_end && metadata_first < allocation_end) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    for (uint64_t i = 0; i < page_count; ++i) {
+        if (frame_state_get(first_frame + i) != FRAME_STATE_ALLOCATED) {
+            nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+            return false;
+        }
+    }
+
+    for (uint64_t i = 0; i < page_count; ++i) {
+        frame_state_set(first_frame + i, FRAME_STATE_FREE);
+    }
+    free_frames += page_count;
+    allocated_frames -= page_count;
+    if (first_frame < next_hint) {
+        next_hint = first_frame;
+    }
+
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return true;
+}
+
 uint64_t nyr_pmm_alloc_frame(void) {
     const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
     if (!allocator_ready || free_frames == 0 || frame_count == 0) {
