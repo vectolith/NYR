@@ -176,9 +176,19 @@ void *nyr_kmalloc(size_t size) {
 
     /* Large allocation: allocate dedicated contiguous pages */
     size_t total_needed = sizeof(struct nyr_heap_header) + size;
-    size_t pages = (total_needed + NYR_PAGE_SIZE - 1) / NYR_PAGE_SIZE;
+    /*
+     * The current PMM interface returns one frame at a time and does not
+     * guarantee contiguous frames. Until a contiguous virtual mapping exists,
+     * fail closed instead of recording multiple pages while allocating only
+     * one (which would permit writes into unallocated memory).
+     */
+    if (total_needed > NYR_PAGE_SIZE) {
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+        return NULL;
+    }
+    size_t pages = 1;
 
-    /* For simplicity and reliability, allocate pages */
+    /* Allocate the single backing page supported by the current heap. */
     void *first_page = heap_alloc_page();
     if (first_page == NULL) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
