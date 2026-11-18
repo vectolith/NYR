@@ -177,13 +177,7 @@ void *nyr_kmalloc(size_t size) {
     /* Large allocations currently use one backing frame only. Do not
      * advertise a multi-page allocation until the PMM exposes a contiguous
      * frame-run allocator and the heap can release the complete run. */
-    if (size > SIZE_MAX - sizeof(struct nyr_heap_header)) {
-        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
-        return NULL;
-    }
-    size_t total_needed = sizeof(struct nyr_heap_header) + size;
-    size_t pages = (total_needed + NYR_PAGE_SIZE - 1) / NYR_PAGE_SIZE;
-    if (pages != 1) {
+    if (size > NYR_PAGE_SIZE - sizeof(struct nyr_heap_header)) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
@@ -194,15 +188,13 @@ void *nyr_kmalloc(size_t size) {
         return NULL;
     }
 
-    /* Note: In NYR single 4 KiB frame allocator, multi-page contiguous allocations
-     * for early kernel heap are bounded or use page chains. For up to 1 page + header: */
     struct nyr_heap_header *hdr = (struct nyr_heap_header *)first_page;
     hdr->magic = NYR_HEAP_MAGIC;
     hdr->size_class_idx = 0xFFFFu;
-    hdr->page_count = (uint16_t)pages;
+    hdr->page_count = 1;
     hdr->requested_size = size;
 
-    total_allocated_bytes += pages * NYR_PAGE_SIZE;
+    total_allocated_bytes += NYR_PAGE_SIZE;
     active_allocations++;
 
     nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
