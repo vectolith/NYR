@@ -10,6 +10,6 @@ RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     && NYR_APT_SNAPSHOT="$UBUNTU_SNAPSHOT" NYR_APT_USE_CACHED_INDEXES=1 apt-install-snapshot \
        build-essential clang lld nasm cmake ninja-build \
        qemu-system-x86 ovmf gdb mtools dosfstools xorriso \
-       rustc cargo python3 pkg-config curl wget file binutils coreutils \
+       rustc cargo python3 pkg-config curl wget file binutils coreutils time \
     && dpkg-query -W -f='${binary:Package}=${Version}\n' > /etc/nyr-toolchain-packages.txt \
     && apt-get clean
