@@ -2,6 +2,8 @@
 
 NYR is a from-scratch x86-64 operating system project.
 
+NYR is an independent systems-software product and research project. Its kernel, boot chain, toolchain, test environment and release process are maintained within this repository. It is not a Velnor OS component and does not depend on any other Vectolith product.
+
 ## Reproducible development environment
 
 The build inputs are recorded in `toolchain.lock`:
