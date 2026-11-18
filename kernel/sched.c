@@ -96,7 +96,7 @@ void nyr_sched_yield(void) {
         return;
     }
 
-    nyr_spinlock_acquire(&sched_lock);
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
 
     /* Round-robin search for next READY task */
     nyr_task_t *prev = current_task;
