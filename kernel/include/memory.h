@@ -18,6 +18,10 @@ bool nyr_pmm_init(const struct limine_memmap_response *memory_map,
 /* Return a 4 KiB-aligned physical address, or 0 on exhaustion/uninitialised. */
 uint64_t nyr_pmm_alloc_frame(void);
 
+/* Allocate/release a physically contiguous run of count 4 KiB frames. */
+uint64_t nyr_pmm_alloc_contiguous_frames(uint64_t count);
+bool nyr_pmm_free_contiguous_frames(uint64_t physical_address, uint64_t count);
+
 /* Release a frame previously returned by nyr_pmm_alloc_frame. */
 bool nyr_pmm_free_frame(uint64_t physical_address);
 
