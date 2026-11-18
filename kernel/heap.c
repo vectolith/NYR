@@ -413,6 +413,22 @@ bool nyr_heap_self_test(void) {
     }
     nyr_kfree(zero_block);
 
+    /* Exercise a multi-page allocation used by kernel task stacks. */
+    const size_t stack_bytes = 16u * 1024u;
+    uint8_t *stack = (uint8_t *)nyr_kmalloc(stack_bytes);
+    if (stack == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < stack_bytes; ++i) {
+        stack[i] = (uint8_t)(i ^ 0xA5u);
+    }
+    for (size_t i = 0; i < stack_bytes; ++i) {
+        if (stack[i] != (uint8_t)(i ^ 0xA5u)) {
+            return false;
+        }
+    }
+    nyr_kfree(stack);
+
     /* Free all small blocks */
     for (size_t i = 0; i < 10; ++i) {
         nyr_kfree(ptrs[i]);
