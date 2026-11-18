@@ -89,10 +89,6 @@ static void *heap_alloc_page(void) {
     return heap_alloc_pages(1);
 }
 
-static bool heap_free_page(void *ptr) {
-    return heap_free_pages(ptr, 1);
-}
-
 void nyr_heap_init(uint64_t hhdm_offset) {
     heap_hhdm_offset = hhdm_offset;
     total_allocated_bytes = 0;
