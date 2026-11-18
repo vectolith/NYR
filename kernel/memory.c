@@ -278,6 +278,110 @@ uint64_t nyr_pmm_alloc_frame(void) {
     return 0;
 }
 
+uint64_t nyr_pmm_alloc_contiguous_frames(uint64_t count) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    if (!allocator_ready || count == 0 || count > free_frames ||
+        count > frame_count) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return 0;
+    }
+
+    const uint64_t max_start = frame_count - count;
+    uint64_t start = next_hint <= max_start ? next_hint : 0;
+    uint64_t found = 0;
+
+    for (uint64_t candidate = start; candidate <= max_start;) {
+        uint64_t offset = 0;
+        while (offset < count &&
+               frame_state_get(candidate + offset) == FRAME_STATE_FREE) {
+            ++offset;
+        }
+        if (offset == count) {
+            found = candidate;
+            break;
+        }
+        candidate += offset + 1u;
+    }
+
+    if (found == 0 && start != 0) {
+        for (uint64_t candidate = 0; candidate < start &&
+             candidate <= max_start;) {
+            uint64_t offset = 0;
+            while (offset < count &&
+                   frame_state_get(candidate + offset) == FRAME_STATE_FREE) {
+                ++offset;
+            }
+            if (offset == count) {
+                found = candidate;
+                break;
+            }
+            candidate += offset + 1u;
+        }
+    }
+
+    if (found == 0) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return 0;
+    }
+
+    for (uint64_t i = 0; i < count; ++i) {
+        frame_state_set(found + i, FRAME_STATE_ALLOCATED);
+    }
+    free_frames -= count;
+    allocated_frames += count;
+    next_hint = found + count;
+    if (next_hint >= frame_count) {
+        next_hint = 0;
+    }
+
+    const uint64_t physical_address = found * NYR_PAGE_SIZE;
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return physical_address;
+}
+
+bool nyr_pmm_free_contiguous_frames(uint64_t physical_address,
+                                    uint64_t count) {
+    const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
+    if (!allocator_ready || count == 0 ||
+        (physical_address & NYR_PAGE_MASK) != 0) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    const uint64_t first = physical_address / NYR_PAGE_SIZE;
+    if (first >= frame_count || count > frame_count - first) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    const uint64_t metadata_first = metadata_physical / NYR_PAGE_SIZE;
+    const uint64_t metadata_end = metadata_first + metadata_pages;
+    const uint64_t run_end = first + count;
+    if (first < metadata_end && metadata_first < run_end) {
+        nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+        return false;
+    }
+
+    for (uint64_t i = 0; i < count; ++i) {
+        if (frame_state_get(first + i) != FRAME_STATE_ALLOCATED) {
+            nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+            return false;
+        }
+    }
+
+    for (uint64_t i = 0; i < count; ++i) {
+        frame_state_set(first + i, FRAME_STATE_FREE);
+    }
+    free_frames += count;
+    allocated_frames -= count;
+    if (first < next_hint) {
+        next_hint = first;
+    }
+
+    nyr_spin_unlock_irqrestore(&pmm_lock, flags);
+    return true;
+}
+
 bool nyr_pmm_free_frame(uint64_t physical_address) {
     const uint64_t flags = nyr_spin_lock_irqsave(&pmm_lock);
     if (!allocator_ready || (physical_address & NYR_PAGE_MASK) != 0) {
@@ -394,6 +498,18 @@ bool nyr_pmm_self_test(void) {
         !nyr_pmm_release_claim(recycled) ||
         nyr_pmm_release_claim(recycled) ||
         !nyr_pmm_free_frame(recycled)) return false;
+
+    const uint64_t contiguous_before = free_frames;
+    const uint64_t contiguous = nyr_pmm_alloc_contiguous_frames(4);
+    if (contiguous == 0 || (contiguous & NYR_PAGE_MASK) != 0 ||
+        free_frames != contiguous_before - 4u ||
+        !nyr_pmm_free_contiguous_frames(contiguous, 4) ||
+        nyr_pmm_free_contiguous_frames(contiguous, 4) ||
+        free_frames != contiguous_before ||
+        nyr_pmm_alloc_contiguous_frames(0) != 0 ||
+        nyr_pmm_free_contiguous_frames(contiguous, 0)) {
+        return false;
+    }
 
     return free_frames == before;
 }
