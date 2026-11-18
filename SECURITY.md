@@ -18,8 +18,11 @@ personal data from logs, screenshots, and requests.
 ## Scope
 
 Reports may cover authentication, authorization, cryptography, data exposure,
-tenant isolation, unsafe parsing, dependency vulnerabilities, build/release
-integrity, and deployment configuration in this repository.
+unsafe parsing, dependency vulnerabilities, build/release integrity, and
+build, boot or deployment configuration in this repository.
+
+NYR owns its kernel, boot path, toolchain and test environment. No other
+Vectolith product is a trusted runtime or required dependency.
 
 Do not test against third-party services, accounts, wallets, homeservers,
 production deployments, or other users' data without explicit authorization.
