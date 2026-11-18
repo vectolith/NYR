@@ -40,46 +40,57 @@ static struct nyr_spinlock heap_lock = NYR_SPINLOCK_INITIALIZER;
 static size_t total_allocated_bytes = 0;
 static size_t active_allocations = 0;
 
+static void *heap_alloc_pages(size_t count) {
+    if (count == 0 || count > SIZE_MAX / NYR_PAGE_SIZE) {
+        return NULL;
+    }
+    const size_t bytes_count = count * NYR_PAGE_SIZE;
 #ifdef NYR_HOST_TEST
-static void *host_alloc_page(void) {
-    void *ptr = aligned_alloc(NYR_PAGE_SIZE, NYR_PAGE_SIZE);
+    void *ptr = aligned_alloc(NYR_PAGE_SIZE, bytes_count);
     if (ptr == NULL) {
         return NULL;
     }
-    memset(ptr, 0, NYR_PAGE_SIZE);
+    memset(ptr, 0, bytes_count);
     return ptr;
-}
-
-static void host_free_page(void *ptr) {
-    free(ptr);
-}
-#endif
-
-static void *heap_alloc_page(void) {
-#ifdef NYR_HOST_TEST
-    return host_alloc_page();
 #else
-    uint64_t frame = nyr_pmm_alloc_frame();
+    const uint64_t frame =
+        nyr_pmm_alloc_contiguous_frames((uint64_t)count);
     if (frame == 0) {
         return NULL;
     }
     void *virt = (void *)(uintptr_t)(frame + heap_hhdm_offset);
     uint8_t *bytes = (uint8_t *)virt;
-    for (size_t i = 0; i < NYR_PAGE_SIZE; ++i) {
+    for (size_t i = 0; i < bytes_count; ++i) {
         bytes[i] = 0;
     }
     return virt;
 #endif
 }
 
-static void heap_free_page(void *ptr) {
+static bool heap_free_pages(void *ptr, size_t count) {
+    if (ptr == NULL || count == 0 || count > SIZE_MAX / NYR_PAGE_SIZE) {
+        return false;
+    }
 #ifdef NYR_HOST_TEST
-    host_free_page(ptr);
+    free(ptr);
+    return true;
 #else
-    if (ptr == NULL) return;
-    uint64_t frame = (uint64_t)(uintptr_t)ptr - heap_hhdm_offset;
-    nyr_pmm_free_frame(frame);
+    const uintptr_t virtual_address = (uintptr_t)ptr;
+    if ((uint64_t)virtual_address < heap_hhdm_offset) {
+        return false;
+    }
+    const uint64_t frame =
+        (uint64_t)virtual_address - heap_hhdm_offset;
+    return nyr_pmm_free_contiguous_frames(frame, (uint64_t)count);
 #endif
+}
+
+static void *heap_alloc_page(void) {
+    return heap_alloc_pages(1);
+}
+
+static bool heap_free_page(void *ptr) {
+    return heap_free_pages(ptr, 1);
 }
 
 void nyr_heap_init(uint64_t hhdm_offset) {
@@ -174,15 +185,22 @@ void *nyr_kmalloc(size_t size) {
         return (void *)(hdr + 1);
     }
 
-    /* Large allocations currently use one backing frame only. Do not
-     * advertise a multi-page allocation until the PMM exposes a contiguous
-     * frame-run allocator and the heap can release the complete run. */
-    if (size > NYR_PAGE_SIZE - sizeof(struct nyr_heap_header)) {
+    /* Large allocations use a physically contiguous PMM frame run. */
+    if (size > SIZE_MAX - sizeof(struct nyr_heap_header)) {
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+        return NULL;
+    }
+    const size_t total_needed = sizeof(struct nyr_heap_header) + size;
+    const size_t pages =
+        total_needed / NYR_PAGE_SIZE +
+        ((total_needed % NYR_PAGE_SIZE) != 0 ? 1u : 0u);
+    if (pages == 0 || pages > UINT16_MAX ||
+        pages > (SIZE_MAX - total_allocated_bytes) / NYR_PAGE_SIZE) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
 
-    void *first_page = heap_alloc_page();
+    void *first_page = heap_alloc_pages(pages);
     if (first_page == NULL) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
@@ -191,10 +209,10 @@ void *nyr_kmalloc(size_t size) {
     struct nyr_heap_header *hdr = (struct nyr_heap_header *)first_page;
     hdr->magic = NYR_HEAP_MAGIC;
     hdr->size_class_idx = 0xFFFFu;
-    hdr->page_count = 1;
+    hdr->page_count = (uint16_t)pages;
     hdr->requested_size = size;
 
-    total_allocated_bytes += NYR_PAGE_SIZE;
+    total_allocated_bytes += pages * NYR_PAGE_SIZE;
     active_allocations++;
 
     nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
@@ -246,11 +264,16 @@ void nyr_kfree(void *ptr) {
         }
     } else {
         /* Large allocation */
-        size_t pages = hdr->page_count;
-        if (total_allocated_bytes >= pages * NYR_PAGE_SIZE) {
-            total_allocated_bytes -= pages * NYR_PAGE_SIZE;
+        const size_t pages = hdr->page_count;
+        if (!heap_free_pages((void *)hdr, pages)) {
+            hdr->magic = NYR_HEAP_MAGIC;
+            nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+            return;
         }
-        heap_free_page((void *)hdr);
+        const size_t released_bytes = pages * NYR_PAGE_SIZE;
+        if (total_allocated_bytes >= released_bytes) {
+            total_allocated_bytes -= released_bytes;
+        }
     }
 
     if (active_allocations > 0) {
