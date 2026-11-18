@@ -1,6 +1,6 @@
 # NYR
 
-NYR is a Vectolith research initiative focused on a from-scratch x86-64 operating-system kernel. It is an independent systems-research initiative, not a Velnor OS project or dependency.
+NYR is a Vectolith systems-software product and research project focused on a from-scratch x86-64 operating-system kernel. Its kernel, boot chain, toolchain, test environment and release process are maintained within this repository. It is not a Velnor OS component and does not depend on any other Vectolith product.
 
 NYR is a from-scratch x86-64 operating system project.
 
