@@ -468,6 +468,17 @@ bool nyr_pmm_self_test(void) {
         return false;
     }
 
+    const uint64_t contiguous = nyr_pmm_alloc_contiguous(4);
+    if (contiguous == 0 ||
+        (contiguous & NYR_PAGE_MASK) != 0 ||
+        !nyr_pmm_frame_is_allocated(contiguous) ||
+        !nyr_pmm_frame_is_allocated(contiguous + 3u * NYR_PAGE_SIZE) ||
+        !nyr_pmm_free_contiguous(contiguous, 4) ||
+        nyr_pmm_free_contiguous(contiguous, 4) ||
+        free_frames != before) {
+        return false;
+    }
+
     const uint64_t recycled = nyr_pmm_alloc_frame();
     if (recycled == 0 || !nyr_pmm_claim_frame(recycled) ||
         nyr_pmm_free_frame(recycled) ||
