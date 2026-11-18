@@ -1,5 +1,7 @@
 # NYR
 
+NYR is a Vectolith systems-software product and research project focused on a from-scratch x86-64 operating-system kernel. Its kernel, boot chain, toolchain, test environment and release process are maintained within this repository. It is not a Velnor OS component and does not depend on any other Vectolith product.
+
 NYR is a from-scratch x86-64 operating system project.
 
 ## Reproducible development environment
@@ -129,3 +131,8 @@ APIC initialization, acknowledge NMI IPIs, then return to `cli; hlt`. They
 do not accept maskable interrupts or execute scheduler work. Maskable IPI delivery, IOAPIC/legacy PIC routing, timer setup, and scheduler
 handoff remain unimplemented. APs continue to execute only the NMI service path
 and remain unavailable to the scheduler.
+
+
+## Public product and security standards
+
+This repository follows the Vectolith [public product standard](PUBLIC_PRODUCT_STANDARD.md) and [security disclosure policy](SECURITY.md). These documents define release evidence and coordinated vulnerability reporting; they do not certify this operating-system project as production-ready.

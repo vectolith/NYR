@@ -16,6 +16,13 @@ for cmd in cc ld make; do
     fi
 done
 
+if [ -x /usr/bin/time ]; then
+    printf '[required: OK] /usr/bin/time\n'
+else
+    printf '[required: MISSING] /usr/bin/time (install the Ubuntu time package)\n'
+    fail=1
+fi
+
 printf '\nDevelopment and emulator tools:\n'
 for cmd in clang ld.lld nasm qemu-system-x86_64 qemu-img gdb mformat mcopy mkfs.fat xorriso rustc cargo python3 git cmake ninja pkg-config curl wget timeout readelf objdump; do
     if command -v "$cmd" >/dev/null 2>&1; then

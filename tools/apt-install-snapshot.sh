@@ -37,10 +37,9 @@ fi
     # timestamp. After this many attempts, drop the pin and build from the live
     # archive so a snapshot outage cannot make CI fail spuriously. The warning
     # keeps the loss of reproducibility visible in the job log.
-    snapshot_fallback_attempt=3
+    snapshot_fallback_attempt=2
     while [ "$attempt" -le "$max_attempts" ]; do
-        if [ -n "$snapshot" ] && [ "$attempt" -ge "$snapshot_fallback_attempt" ] &&
-           [ -f /etc/apt/apt.conf.d/50snapshot ]; then
+        if [ -n "$snapshot" ] && [ "$attempt" -ge "$snapshot_fallback_attempt" ]; then
             echo "Ubuntu snapshot $snapshot unavailable after $((attempt - 1)) attempts; falling back to the live archive (reproducibility reduced, packages not pinned)" >&2
             rm -f /etc/apt/apt.conf.d/50snapshot
             snapshot=""
@@ -71,7 +70,7 @@ fi
     fi
 
     if [ "$attempt" -eq "$max_attempts" ]; then
-        echo "APT snapshot remained incomplete after $max_attempts attempts" >&2
+        echo "APT package indexes remained incomplete after $max_attempts attempts" >&2
         exit 1
     fi
     echo "APT snapshot attempt $attempt/$max_attempts failed; retrying" >&2
