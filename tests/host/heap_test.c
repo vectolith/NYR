@@ -28,6 +28,15 @@ int main(void) {
     assert(p1 == p2);
     nyr_kfree(p2);
 
+    /* Oversized allocations must fail instead of returning undersized storage. */
+    assert(nyr_kmalloc(4096) == NULL);
+
+    /* Test a large allocation that fits in one backing page. */
+    void *large = nyr_kmalloc(3000);
+    assert(large != NULL);
+    memset(large, 0xA5, 3000);
+    nyr_kfree(large);
+
     /* Test various size classes */
     for (size_t s = 8; s <= 2048; s *= 2) {
         void *p = nyr_kmalloc(s);
