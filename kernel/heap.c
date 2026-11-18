@@ -82,6 +82,46 @@ static void heap_free_page(void *ptr) {
 #endif
 }
 
+static void *heap_alloc_contiguous_pages(size_t pages) {
+    if (pages == 0 || pages > SIZE_MAX / NYR_PAGE_SIZE) {
+        return NULL;
+    }
+    const size_t bytes = pages * NYR_PAGE_SIZE;
+#ifdef NYR_HOST_TEST
+    void *ptr = aligned_alloc(NYR_PAGE_SIZE, bytes);
+    if (ptr != NULL) {
+        memset(ptr, 0, bytes);
+    }
+    return ptr;
+#else
+    const uint64_t physical = nyr_pmm_alloc_contiguous((uint64_t)pages);
+    if (physical == 0 || physical > UINT64_MAX - heap_hhdm_offset) {
+        if (physical != 0) {
+            (void)nyr_pmm_free_contiguous(physical, (uint64_t)pages);
+        }
+        return NULL;
+    }
+    void *ptr = (void *)(uintptr_t)(physical + heap_hhdm_offset);
+    uint8_t *bytes_ptr = (uint8_t *)ptr;
+    for (size_t i = 0; i < bytes; ++i) {
+        bytes_ptr[i] = 0;
+    }
+    return ptr;
+#endif
+}
+
+static void heap_free_contiguous_pages(void *ptr, size_t pages) {
+    if (ptr == NULL || pages == 0) {
+        return;
+    }
+#ifdef NYR_HOST_TEST
+    free(ptr);
+#else
+    const uint64_t physical = (uint64_t)(uintptr_t)ptr - heap_hhdm_offset;
+    (void)nyr_pmm_free_contiguous(physical, (uint64_t)pages);
+#endif
+}
+
 void nyr_heap_init(uint64_t hhdm_offset) {
     heap_hhdm_offset = hhdm_offset;
     total_allocated_bytes = 0;
@@ -174,29 +214,25 @@ void *nyr_kmalloc(size_t size) {
         return (void *)(hdr + 1);
     }
 
-    /* Large allocation: allocate dedicated contiguous pages */
-    size_t total_needed = sizeof(struct nyr_heap_header) + size;
-    /*
-     * The current PMM interface returns one frame at a time and does not
-     * guarantee contiguous frames. Until a contiguous virtual mapping exists,
-     * fail closed instead of recording multiple pages while allocating only
-     * one (which would permit writes into unallocated memory).
-     */
-    if (total_needed > NYR_PAGE_SIZE) {
+    /* Large allocation: reserve enough physically contiguous backing pages. */
+    if (size > SIZE_MAX - sizeof(struct nyr_heap_header)) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
-    size_t pages = 1;
+    const size_t total_needed = sizeof(struct nyr_heap_header) + size;
+    const size_t pages = total_needed / NYR_PAGE_SIZE +
+                         ((total_needed % NYR_PAGE_SIZE) != 0 ? 1u : 0u);
+    if (pages == 0 || pages > UINT16_MAX) {
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+        return NULL;
+    }
 
-    /* Allocate the single backing page supported by the current heap. */
-    void *first_page = heap_alloc_page();
+    void *first_page = heap_alloc_contiguous_pages(pages);
     if (first_page == NULL) {
         nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
 
-    /* Note: In NYR single 4 KiB frame allocator, multi-page contiguous allocations
-     * for early kernel heap are bounded or use page chains. For up to 1 page + header: */
     struct nyr_heap_header *hdr = (struct nyr_heap_header *)first_page;
     hdr->magic = NYR_HEAP_MAGIC;
     hdr->size_class_idx = 0xFFFFu;
@@ -259,7 +295,7 @@ void nyr_kfree(void *ptr) {
         if (total_allocated_bytes >= pages * NYR_PAGE_SIZE) {
             total_allocated_bytes -= pages * NYR_PAGE_SIZE;
         }
-        heap_free_page((void *)hdr);
+        heap_free_contiguous_pages((void *)hdr, pages);
     }
 
     if (active_allocations > 0) {
