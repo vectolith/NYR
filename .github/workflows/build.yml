@@ -28,6 +28,7 @@ jobs:
         run: |
           . ./toolchain.lock
           printf 'APT::Snapshot "%s";\n' "$UBUNTU_SNAPSHOT" > /etc/apt/apt.conf.d/50snapshot
+          printf 'NYR_APT_SNAPSHOT=%s\n' "$UBUNTU_SNAPSHOT" >> "$GITHUB_ENV"
       - name: Install pinned build and emulator dependencies
         run: |
           tools/apt-install-snapshot.sh build-essential qemu-system-x86 ovmf binutils xorriso mtools curl file time
