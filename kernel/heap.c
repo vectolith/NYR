@@ -308,11 +308,17 @@ void *nyr_krealloc(void *ptr, size_t new_size) {
 }
 
 size_t nyr_heap_total_allocated(void) {
-    return total_allocated_bytes;
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
+    size_t total = total_allocated_bytes;
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+    return total;
 }
 
 size_t nyr_heap_allocation_count(void) {
-    return active_allocations;
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
+    size_t count = active_allocations;
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+    return count;
 }
 
 bool nyr_heap_self_test(void) {
