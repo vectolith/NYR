@@ -42,8 +42,8 @@ static size_t active_allocations = 0;
 
 #ifdef NYR_HOST_TEST
 static void *host_alloc_page(void) {
-    void *ptr = NULL;
-    if (posix_memalign(&ptr, NYR_PAGE_SIZE, NYR_PAGE_SIZE) != 0) {
+    void *ptr = aligned_alloc(NYR_PAGE_SIZE, NYR_PAGE_SIZE);
+    if (ptr == NULL) {
         return NULL;
     }
     memset(ptr, 0, NYR_PAGE_SIZE);
@@ -105,7 +105,7 @@ void *nyr_kmalloc(size_t size) {
         return NULL;
     }
 
-    nyr_spinlock_acquire(&heap_lock);
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
 
     int sc_idx = get_size_class_index(size);
     if (sc_idx >= 0) {
@@ -123,7 +123,7 @@ void *nyr_kmalloc(size_t size) {
             /* Create new slab */
             void *page = heap_alloc_page();
             if (page == NULL) {
-                nyr_spinlock_release(&heap_lock);
+                nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
                 return NULL;
             }
 
@@ -152,7 +152,7 @@ void *nyr_kmalloc(size_t size) {
         }
 
         if (slab->free_list == NULL) {
-            nyr_spinlock_release(&heap_lock);
+            nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
             return NULL;
         }
 
@@ -170,18 +170,27 @@ void *nyr_kmalloc(size_t size) {
         total_allocated_bytes += block_data_size;
         active_allocations++;
 
-        nyr_spinlock_release(&heap_lock);
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return (void *)(hdr + 1);
     }
 
-    /* Large allocation: allocate dedicated contiguous pages */
+    /* Large allocations currently use one backing frame only. Do not
+     * advertise a multi-page allocation until the PMM exposes a contiguous
+     * frame-run allocator and the heap can release the complete run. */
+    if (size > SIZE_MAX - sizeof(struct nyr_heap_header)) {
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+        return NULL;
+    }
     size_t total_needed = sizeof(struct nyr_heap_header) + size;
     size_t pages = (total_needed + NYR_PAGE_SIZE - 1) / NYR_PAGE_SIZE;
+    if (pages != 1) {
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+        return NULL;
+    }
 
-    /* For simplicity and reliability, allocate pages */
     void *first_page = heap_alloc_page();
     if (first_page == NULL) {
-        nyr_spinlock_release(&heap_lock);
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
 
@@ -196,7 +205,7 @@ void *nyr_kmalloc(size_t size) {
     total_allocated_bytes += pages * NYR_PAGE_SIZE;
     active_allocations++;
 
-    nyr_spinlock_release(&heap_lock);
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
     return (void *)(hdr + 1);
 }
 
@@ -217,12 +226,12 @@ void nyr_kfree(void *ptr) {
     }
 
     struct nyr_heap_header *hdr = ((struct nyr_heap_header *)ptr) - 1;
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
     if (hdr->magic != NYR_HEAP_MAGIC) {
-        /* Invalid or double free; fail-safe return */
+        /* Invalid or double free; fail-safe return. */
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return;
     }
-
-    nyr_spinlock_acquire(&heap_lock);
 
     /* Invalidate magic to detect double-free */
     hdr->magic = 0xDEADBEEFu;
@@ -256,7 +265,7 @@ void nyr_kfree(void *ptr) {
         active_allocations--;
     }
 
-    nyr_spinlock_release(&heap_lock);
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
 }
 
 void *nyr_krealloc(void *ptr, size_t new_size) {
@@ -298,11 +307,17 @@ void *nyr_krealloc(void *ptr, size_t new_size) {
 }
 
 size_t nyr_heap_total_allocated(void) {
-    return total_allocated_bytes;
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
+    const size_t value = total_allocated_bytes;
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+    return value;
 }
 
 size_t nyr_heap_allocation_count(void) {
-    return active_allocations;
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
+    const size_t value = active_allocations;
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
+    return value;
 }
 
 bool nyr_heap_self_test(void) {
