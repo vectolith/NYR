@@ -236,11 +236,11 @@ void nyr_console_putc(char c) {
 
 void nyr_console_write(const char *text) {
     if (!console_ready || text == 0) return;
-    nyr_spinlock_acquire(&console_lock);
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&console_lock);
     while (*text != '\0') {
         nyr_console_putc(*text++);
     }
-    nyr_spinlock_release(&console_lock);
+    nyr_spin_unlock_irqrestore(&console_lock, irq_flags);
 }
 
 void nyr_kprint(const char *text) {
