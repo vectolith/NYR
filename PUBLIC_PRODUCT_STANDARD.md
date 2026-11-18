@@ -8,6 +8,8 @@
 
 Vectolith products are built for use by their intended public audiences. They are not assumed to be private prototypes or internal-only tools. Public consumption does not, by itself, mean that a source repository, service endpoint, dataset, or operational system must be publicly exposed. Repository visibility and deployment exposure must be deliberate security decisions.
 
+NYR is an independent x86-64 operating-system project. It owns its kernel, boot path, toolchain, build system, tests and release lifecycle; it must build and validate without another Vectolith product. Integrations with other products are not assumed.
+
 This standard is a required engineering baseline, not a claim that the repository already satisfies every requirement. Compliance must be established through implementation, tests, and review.
 
 ## Required release gates
@@ -68,10 +70,10 @@ For repositories that train, evaluate, distribute, or serve models or AI feature
 - Clearly disclose model limitations and avoid unsupported claims about accuracy, safety, or capability.
 - Preserve raw evaluation evidence and dissenting results; do not select or suppress evidence solely to make a model appear better.
 
-### 8. Financial and dependency discipline
-- Prefer maintainable open standards and free/open-source dependencies where they meet the requirement.
-- Do not introduce paid APIs, infrastructure, trials, or services without explicit authorization.
-- Document operational dependencies, quotas, limits, and failure behavior. Never rely on quota circumvention.
+### 8. External dependency management
+- Identify external services, trust boundaries, data flows, quotas, limits, and failure behavior.
+- Use supported interfaces and documented contracts; do not rely on undocumented service behavior or quota circumvention.
+- Keep the kernel, build system, boot path and test workflow independently reproducible.
 
 ## Repository-specific implementation
 
