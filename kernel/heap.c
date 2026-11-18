@@ -42,8 +42,8 @@ static size_t active_allocations = 0;
 
 #ifdef NYR_HOST_TEST
 static void *host_alloc_page(void) {
-    void *ptr = NULL;
-    if (posix_memalign(&ptr, NYR_PAGE_SIZE, NYR_PAGE_SIZE) != 0) {
+    void *ptr = aligned_alloc(NYR_PAGE_SIZE, NYR_PAGE_SIZE);
+    if (ptr == NULL) {
         return NULL;
     }
     memset(ptr, 0, NYR_PAGE_SIZE);
@@ -105,7 +105,7 @@ void *nyr_kmalloc(size_t size) {
         return NULL;
     }
 
-    nyr_spinlock_acquire(&heap_lock);
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
 
     int sc_idx = get_size_class_index(size);
     if (sc_idx >= 0) {
@@ -123,7 +123,7 @@ void *nyr_kmalloc(size_t size) {
             /* Create new slab */
             void *page = heap_alloc_page();
             if (page == NULL) {
-                nyr_spinlock_release(&heap_lock);
+                nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
                 return NULL;
             }
 
