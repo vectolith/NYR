@@ -152,7 +152,7 @@ void *nyr_kmalloc(size_t size) {
         }
 
         if (slab->free_list == NULL) {
-            nyr_spinlock_release(&heap_lock);
+            nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
             return NULL;
         }
 
@@ -170,7 +170,7 @@ void *nyr_kmalloc(size_t size) {
         total_allocated_bytes += block_data_size;
         active_allocations++;
 
-        nyr_spinlock_release(&heap_lock);
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return (void *)(hdr + 1);
     }
 
@@ -181,7 +181,7 @@ void *nyr_kmalloc(size_t size) {
     /* For simplicity and reliability, allocate pages */
     void *first_page = heap_alloc_page();
     if (first_page == NULL) {
-        nyr_spinlock_release(&heap_lock);
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return NULL;
     }
 
@@ -196,7 +196,7 @@ void *nyr_kmalloc(size_t size) {
     total_allocated_bytes += pages * NYR_PAGE_SIZE;
     active_allocations++;
 
-    nyr_spinlock_release(&heap_lock);
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
     return (void *)(hdr + 1);
 }
 
@@ -217,12 +217,12 @@ void nyr_kfree(void *ptr) {
     }
 
     struct nyr_heap_header *hdr = ((struct nyr_heap_header *)ptr) - 1;
+    uint64_t irq_flags = nyr_spin_lock_irqsave(&heap_lock);
     if (hdr->magic != NYR_HEAP_MAGIC) {
         /* Invalid or double free; fail-safe return */
+        nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
         return;
     }
-
-    nyr_spinlock_acquire(&heap_lock);
 
     /* Invalidate magic to detect double-free */
     hdr->magic = 0xDEADBEEFu;
@@ -256,7 +256,7 @@ void nyr_kfree(void *ptr) {
         active_allocations--;
     }
 
-    nyr_spinlock_release(&heap_lock);
+    nyr_spin_unlock_irqrestore(&heap_lock, irq_flags);
 }
 
 void *nyr_krealloc(void *ptr, size_t new_size) {
