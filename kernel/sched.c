@@ -76,7 +76,7 @@ nyr_task_t *nyr_task_create(const char *name, nyr_task_entry_t entry, void *arg)
      */
     uint64_t *sp = (uint64_t *)((uintptr_t)stack + NYR_TASK_STACK_SIZE);
     /* Align downwards */
-    sp = (uint64_t *)((uintptr_t)sp & ~15u);
+    sp = (uint64_t *)((uintptr_t)sp & ~(uintptr_t)15u);
 
     /* Frame layout matching nyr_switch_context pop order:
      * ret-address (nyr_task_starter), rflags, rbx, rbp, r12, r13, r14, r15
