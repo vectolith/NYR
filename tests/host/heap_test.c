@@ -28,14 +28,17 @@ int main(void) {
     assert(p1 == p2);
     nyr_kfree(p2);
 
-    /* Oversized allocations must fail instead of returning undersized storage. */
-    assert(nyr_kmalloc(4096) == NULL);
-
-    /* Test a large allocation that fits in one backing page. */
-    void *large = nyr_kmalloc(3000);
+    /* Multi-page allocations must be contiguous and fully writable. */
+    void *large = nyr_kmalloc(16384);
     assert(large != NULL);
-    memset(large, 0xA5, 3000);
+    memset(large, 0xA5, 16384);
+    for (size_t i = 0; i < 16384; ++i) {
+        assert(((unsigned char *)large)[i] == 0xA5);
+    }
     nyr_kfree(large);
+
+    /* Overflowing size requests must fail without allocating memory. */
+    assert(nyr_kmalloc(SIZE_MAX) == NULL);
 
     /* Test various size classes */
     for (size_t s = 8; s <= 2048; s *= 2) {
