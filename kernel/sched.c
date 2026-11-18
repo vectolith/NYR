@@ -39,18 +39,27 @@ nyr_task_t *nyr_task_create(const char *name, nyr_task_entry_t entry, void *arg)
         return NULL;
     }
 
-    nyr_spinlock_acquire(&sched_lock);
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
+    uint64_t task_count = 0;
+    for (nyr_task_t *existing = task_list; existing != NULL;
+         existing = existing->next) {
+        ++task_count;
+    }
+    if (task_count >= MAX_TASKS) {
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
+        return NULL;
+    }
 
     nyr_task_t *task = (nyr_task_t *)nyr_kmalloc(sizeof(nyr_task_t));
     if (task == NULL) {
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return NULL;
     }
 
     void *stack = nyr_kmalloc(NYR_TASK_STACK_SIZE);
     if (stack == NULL) {
         nyr_kfree(task);
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return NULL;
     }
 
@@ -87,7 +96,7 @@ nyr_task_t *nyr_task_create(const char *name, nyr_task_entry_t entry, void *arg)
     task->next = task_list;
     task_list = task;
 
-    nyr_spinlock_release(&sched_lock);
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
     return task;
 }
 
@@ -96,7 +105,7 @@ void nyr_sched_yield(void) {
         return;
     }
 
-    nyr_spinlock_acquire(&sched_lock);
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
 
     /* Round-robin search for next READY task */
     nyr_task_t *prev = current_task;
@@ -111,7 +120,7 @@ void nyr_sched_yield(void) {
 
     if (next == prev || next->state != NYR_TASK_READY) {
         /* No other ready task found */
-        nyr_spinlock_release(&sched_lock);
+        nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
         return;
     }
 
@@ -121,16 +130,18 @@ void nyr_sched_yield(void) {
     next->state = NYR_TASK_RUNNING;
     current_task = next;
 
-    nyr_spinlock_release(&sched_lock);
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
 
     /* Perform the context switch */
     nyr_switch_context(&prev->rsp, next->rsp);
 }
 
 void nyr_task_exit(void) {
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
     if (current_task != NULL) {
         current_task->state = NYR_TASK_ZOMBIE;
     }
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
     for (;;) {
         nyr_sched_yield();
         __asm__ volatile ("pause");
@@ -138,16 +149,21 @@ void nyr_task_exit(void) {
 }
 
 nyr_task_t *nyr_current_task(void) {
-    return current_task;
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
+    nyr_task_t *task = current_task;
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
+    return task;
 }
 
 uint64_t nyr_sched_task_count(void) {
+    const uint64_t irq_flags = nyr_spin_lock_irqsave(&sched_lock);
     uint64_t count = 0;
-    nyr_task_t *t = task_list;
-    while (t != NULL) {
-        count++;
-        t = t->next;
+    nyr_task_t *task = task_list;
+    while (task != NULL) {
+        ++count;
+        task = task->next;
     }
+    nyr_spin_unlock_irqrestore(&sched_lock, irq_flags);
     return count;
 }
 
